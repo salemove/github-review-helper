@@ -47,8 +47,7 @@ func main() {
 		}
 		eventType := r.Header.Get("X-Github-Event")
 		if eventType != "issue_comment" {
-			log.Println("Unexpected event type: " + eventType)
-			http.Error(w, "Unexpected event type", http.StatusBadRequest)
+			w.Write([]byte("Not an event I understand. Ignoring."))
 			return
 		}
 		issueComment, err := parseIssueComment(body)
@@ -71,7 +70,7 @@ func main() {
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Wants to merge branch %s to %s", *pr.Head.Ref, *pr.Base.Ref)
+		log.Printf("Squashing %s that's going to be merged into %s", *pr.Head.Ref, *pr.Base.Ref)
 	})
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.Port), nil))
 }
