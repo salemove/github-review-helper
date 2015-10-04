@@ -8,16 +8,22 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
 )
 
 type IssueComment struct {
-	IssueID       string
-	Comment       string
-	IsPullRequest bool
+	IssueNumber     int
+	Comment         string
+	IsPullRequest   bool
+	RepositoryOwner string
+	RepositoryName  string
 }
 
 func main() {
 	conf := NewConfig()
+	githubClient := initGithubClient(conf.AccessToken)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		body, err := ioutil.ReadAll(r.Body)
@@ -52,17 +58,36 @@ func main() {
 			w.Write([]byte{})
 			return
 		}
-		// TODO get the PR stuff and squash+push
+		pr, _, err := githubClient.PullRequests.Get(issueComment.RepositoryOwner, issueComment.RepositoryName, issueComment.IssueNumber)
+		if err != nil {
+			log.Printf("Getting PR %s/%s#%d failed: %s\n", issueComment.RepositoryOwner, issueComment.RepositoryName, issueComment.IssueNumber, err.Error())
+			http.Error(w, "", http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Wants to merge branch %s to %s", pr.Head.Ref, pr.Base.Ref)
 	})
-
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.Port), nil))
+}
+
+func initGithubClient(accessToken string) *github.Client {
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: accessToken},
+	)
+	tc := oauth2.NewClient(oauth2.NoContext, ts)
+	return github.NewClient(tc)
 }
 
 func parseIssueComment(body []byte) (IssueComment, error) {
 	var message struct {
 		Issue struct {
-			ID string `json:"id"`
+			Number int `json:"Number"`
 		} `json:"issue"`
+		Repository struct {
+			Name  string `json:"name"`
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+		} `json:"repository"`
 		Comment struct {
 			Body string `json:"body"`
 		} `json:"comment"`
@@ -75,9 +100,11 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 		return IssueComment{}, err
 	}
 	return IssueComment{
-		IssueID:       message.Issue.ID,
-		Comment:       message.Comment.Body,
-		IsPullRequest: message.PullRequest.URL != "",
+		IssueNumber:     message.Issue.Number,
+		Comment:         message.Comment.Body,
+		IsPullRequest:   message.PullRequest.URL != "",
+		RepositoryOwner: message.Repository.Owner.Login,
+		RepositoryName:  message.Repository.Name,
 	}, nil
 }
 
