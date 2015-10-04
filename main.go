@@ -2,7 +2,8 @@ package main
 
 import (
 	"crypto/hmac"
-	"crypto/sha256"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -32,9 +33,15 @@ func main() {
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
-		bodyMAC := r.Header.Get("X-Hub-Signature")
-		if !areMACsEqual(body, []byte(bodyMAC), []byte(conf.Secret)) {
-			log.Println("Failed to read the request's body")
+		signature := r.Header.Get("X-Hub-Signature")
+		hasSecret, err := hasSecret(body, signature, conf.Secret)
+		if err != nil {
+			log.Println("Failed to check the signature")
+			http.Error(w, "Failed to check the signature", http.StatusInternalServerError)
+			return
+		}
+		if !hasSecret {
+			log.Println("Bad X-Hub-Signature")
 			http.Error(w, "Bad X-Hub-Signature", http.StatusBadRequest)
 			return
 		}
@@ -108,9 +115,16 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 	}, nil
 }
 
-func areMACsEqual(message, messageMAC, key []byte) bool {
-	mac := hmac.New(sha256.New, key)
+func hasSecret(message []byte, signature, key string) (bool, error) {
+	var messageMACString string
+	fmt.Sscanf(signature, "sha1=%s", &messageMACString)
+	messageMAC, err := hex.DecodeString(messageMACString)
+	if err != nil {
+		return false, err
+	}
+
+	mac := hmac.New(sha1.New, []byte(key))
 	mac.Write(message)
 	expectedMAC := mac.Sum(nil)
-	return hmac.Equal(messageMAC, expectedMAC)
+	return hmac.Equal(messageMAC, expectedMAC), nil
 }
