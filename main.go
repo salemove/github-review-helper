@@ -58,11 +58,11 @@ func main() {
 			return
 		}
 		if !issueComment.IsPullRequest {
-			w.Write([]byte{})
+			w.Write([]byte("Not a PR. Ignoring."))
 			return
 		}
 		if issueComment.Comment != "!squash" {
-			w.Write([]byte{})
+			w.Write([]byte("Not a command I understand. Ignoring."))
 			return
 		}
 		pr, _, err := githubClient.PullRequests.Get(issueComment.RepositoryOwner, issueComment.RepositoryName, issueComment.IssueNumber)
@@ -71,7 +71,7 @@ func main() {
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Wants to merge branch %s to %s", pr.Head.Ref, pr.Base.Ref)
+		log.Printf("Wants to merge branch %s to %s", *pr.Head.Ref, *pr.Base.Ref)
 	})
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.Port), nil))
 }
@@ -87,7 +87,10 @@ func initGithubClient(accessToken string) *github.Client {
 func parseIssueComment(body []byte) (IssueComment, error) {
 	var message struct {
 		Issue struct {
-			Number int `json:"Number"`
+			Number      int `json:"Number"`
+			PullRequest struct {
+				URL string `json:"url"`
+			} `json:"pull_request"`
 		} `json:"issue"`
 		Repository struct {
 			Name  string `json:"name"`
@@ -98,9 +101,6 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 		Comment struct {
 			Body string `json:"body"`
 		} `json:"comment"`
-		PullRequest struct {
-			URL string `json:"url"`
-		} `json:"pull_request"`
 	}
 	err := json.Unmarshal(body, &message)
 	if err != nil {
@@ -109,7 +109,7 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 	return IssueComment{
 		IssueNumber:     message.Issue.Number,
 		Comment:         message.Comment.Body,
-		IsPullRequest:   message.PullRequest.URL != "",
+		IsPullRequest:   message.Issue.PullRequest.URL != "",
 		RepositoryOwner: message.Repository.Owner.Login,
 		RepositoryName:  message.Repository.Name,
 	}, nil
