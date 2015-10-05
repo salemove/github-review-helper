@@ -12,6 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
+
+	"gopkg.in/tylerb/graceful.v1"
 
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
@@ -39,7 +42,8 @@ func main() {
 	}
 	defer os.RemoveAll(reposDir)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Println("Failed to read the request's body")
@@ -98,7 +102,8 @@ func main() {
 			}
 		}
 	})
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.Port), nil))
+
+	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
 }
 
 func exists(path string) (bool, error) {
