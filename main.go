@@ -89,18 +89,45 @@ func main() {
 		}
 		log.Printf("Squashing %s that's going to be merged into %s", *pr.Head.Ref, *pr.Base.Ref)
 		localRepoPath := filepath.Join(reposDir, issueComment.Repository.Owner, issueComment.Repository.Name)
-		if exists, err := exists(localRepoPath); err != nil {
+		exists, err := exists(localRepoPath)
+		if err != nil {
 			log.Println("Failed to check if dir " + localRepoPath + " exists")
 			http.Error(w, "Failed check if the repo is already checked out", http.StatusInternalServerError)
 			return
-		} else if !exists {
+		}
+		if !exists {
 			log.Printf("Cloning %s/%s into %s\n", issueComment.Repository.Owner, issueComment.Repository.Name, localRepoPath)
 			if err = exec.Command("git", "clone", issueComment.Repository.URL, localRepoPath).Run(); err != nil {
-				log.Println("The clone failed: " + err.Error())
+				log.Println("The clone failed: ", err)
 				http.Error(w, "Failed to clone the repo", http.StatusInternalServerError)
 				return
 			}
+		} else {
+			log.Printf("Fetching latest changes for %s/%s\n", issueComment.Repository.Owner, issueComment.Repository.Name)
+			if err = exec.Command("git", "-C", localRepoPath, "fetch").Run(); err != nil {
+				log.Println("The fetch failed: ", err)
+				http.Error(w, "Failed to fetch the latest changes for the repo", http.StatusInternalServerError)
+				return
+			}
 		}
+		// This makes the --interactive rebase not actually interactive
+		if err = os.Setenv("GIT_SEQUENCE_EDITOR", "true"); err != nil {
+			log.Println("Failed to change the env variable: ", err)
+			http.Error(w, "Failed to change an env variable", http.StatusInternalServerError)
+			return
+		}
+		defer os.Unsetenv("GIT_SEQUENCE_EDITOR")
+		if err = exec.Command("git", "-C", localRepoPath, "rebase", "--interactive", "--autosquash", *pr.Base.SHA, *pr.Head.SHA).Run(); err != nil {
+			log.Println("Failed to rebase: ", err)
+			http.Error(w, "Failed to rebase", http.StatusInternalServerError)
+			return
+		}
+		if err = exec.Command("git", "-C", localRepoPath, "push", "--force", "origin", "@:"+*pr.Head.Ref).Run(); err != nil {
+			log.Println("Failed to push the squashed version: ", err)
+			http.Error(w, "Failed to push the squashed version", http.StatusInternalServerError)
+			return
+		}
+		w.Write([]byte{})
 	})
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
