@@ -9,22 +9,35 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
 
 type IssueComment struct {
-	IssueNumber     int
-	Comment         string
-	IsPullRequest   bool
-	RepositoryOwner string
-	RepositoryName  string
+	IssueNumber   int
+	Comment       string
+	IsPullRequest bool
+	Repository    Repository
+}
+
+type Repository struct {
+	Owner string
+	Name  string
+	URL   string
 }
 
 func main() {
 	conf := NewConfig()
 	githubClient := initGithubClient(conf.AccessToken)
+	reposDir, err := ioutil.TempDir("", "github-review-helper")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(reposDir)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		body, err := ioutil.ReadAll(r.Body)
@@ -64,15 +77,38 @@ func main() {
 			w.Write([]byte("Not a command I understand. Ignoring."))
 			return
 		}
-		pr, _, err := githubClient.PullRequests.Get(issueComment.RepositoryOwner, issueComment.RepositoryName, issueComment.IssueNumber)
+		pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
 		if err != nil {
-			log.Printf("Getting PR %s/%s#%d failed: %s\n", issueComment.RepositoryOwner, issueComment.RepositoryName, issueComment.IssueNumber, err.Error())
+			log.Printf("Getting PR %s/%s#%d failed: %s\n", issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber, err.Error())
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
 		log.Printf("Squashing %s that's going to be merged into %s", *pr.Head.Ref, *pr.Base.Ref)
+		localRepoPath := filepath.Join(reposDir, issueComment.Repository.Owner, issueComment.Repository.Name)
+		if exists, err := exists(localRepoPath); err != nil {
+			log.Println("Failed to check if dir " + localRepoPath + " exists")
+			http.Error(w, "Failed check if the repo is already checked out", http.StatusInternalServerError)
+			return
+		} else if !exists {
+			log.Printf("Cloning %s/%s into %s\n", issueComment.Repository.Owner, issueComment.Repository.Name, localRepoPath)
+			if err = exec.Command("git", "clone", issueComment.Repository.URL, localRepoPath).Run(); err != nil {
+				log.Println("The clone failed: " + err.Error())
+				http.Error(w, "Failed to clone the repo", http.StatusInternalServerError)
+				return
+			}
+		}
 	})
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.Port), nil))
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func initGithubClient(accessToken string) *github.Client {
@@ -96,6 +132,7 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 			Owner struct {
 				Login string `json:"login"`
 			} `json:"owner"`
+			SSHURL string `json:"ssh_url"`
 		} `json:"repository"`
 		Comment struct {
 			Body string `json:"body"`
@@ -106,11 +143,14 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 		return IssueComment{}, err
 	}
 	return IssueComment{
-		IssueNumber:     message.Issue.Number,
-		Comment:         message.Comment.Body,
-		IsPullRequest:   message.Issue.PullRequest.URL != "",
-		RepositoryOwner: message.Repository.Owner.Login,
-		RepositoryName:  message.Repository.Name,
+		IssueNumber:   message.Issue.Number,
+		Comment:       message.Comment.Body,
+		IsPullRequest: message.Issue.PullRequest.URL != "",
+		Repository: Repository{
+			Owner: message.Repository.Owner.Login,
+			Name:  message.Repository.Name,
+			URL:   message.Repository.SSHURL,
+		},
 	}, nil
 }
 
