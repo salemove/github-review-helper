@@ -1,8 +1,8 @@
 # github-review-helper
 
-[![Build Status](https://travis-ci.org/deiwin/github-review-helper.svg?branch=master)](https://travis-ci.org/deiwin/github-review-helper)
-[![Coverage](http://gocover.io/_badge/github.com/deiwin/github-review-helper?0)](http://gocover.io/github.com/deiwin/github-review-helper)
-[![GoDoc](https://godoc.org/github.com/deiwin/github-review-helper?status.svg)](https://godoc.org/github.com/deiwin/github-review-helper)
+[![Build Status](https://travis-ci.org/salemove/github-review-helper.svg?branch=master)](https://travis-ci.org/salemove/github-review-helper)
+[![Coverage](http://gocover.io/_badge/github.com/salemove/github-review-helper?0)](http://gocover.io/github.com/salemove/github-review-helper)
+[![GoDoc](https://godoc.org/github.com/salemove/github-review-helper?status.svg)](https://godoc.org/github.com/salemove/github-review-helper)
 
 ## What?
 **github-review-helper** is a little bot that you can set up GitHub hooks for to improve your project's PR review flow.
@@ -25,8 +25,8 @@ following the guide and mark it down.
 The following commands expect you to have Go installed and your *GOPATH* to be properly set up. To compile and install
 the bot, run the following commands:
 ```
-go get github.com/deiwin/github-review-helper
-cd $GOPATH/github.com/deiwin/github-review-helper
+go get github.com/salemove/github-review-helper
+cd $GOPATH/github.com/salemove/github-review-helper
 go install
 ```
 
