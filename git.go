@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type Git interface {
@@ -108,5 +109,6 @@ func (r repo) GetHeadSHA() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get the current HEAD's SHA: %v", err)
 	}
-	return string(output[:]), nil
+	headSHA := strings.TrimSpace(string(output[:]))
+	return headSHA, nil
 }
