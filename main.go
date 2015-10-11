@@ -177,7 +177,7 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 	var message struct {
 		Action      string `json:"action"`
-		Number      int    `json:"Number"`
+		Number      int    `json:"number"`
 		PullRequest struct {
 			URL string `json:"url"`
 		} `json:"pull_request"`
