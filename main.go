@@ -120,7 +120,7 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	for _, commit := range commits {
-		if strings.HasPrefix(*commit.Message, "!fixup ") || strings.HasPrefix(*commit.Message, "!squash ") {
+		if strings.HasPrefix(*commit.Commit.Message, "fixup! ") || strings.HasPrefix(*commit.Commit.Message, "squash! ") {
 			githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *commit.SHA, &github.RepoStatus{
 				State:       github.String("pending"),
 				Description: github.String("This commit needs to be squashed with !squash before merging"),
