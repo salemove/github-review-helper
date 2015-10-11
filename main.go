@@ -111,7 +111,7 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	}
-	if pullRequestEvent.Action != "opened" || pullRequestEvent.Action != "synchronize" {
+	if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
 	commits, _, err := githubClient.PullRequests.ListCommits(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber, nil)
