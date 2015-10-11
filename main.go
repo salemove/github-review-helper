@@ -137,6 +137,7 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 	if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
+	log.Printf("Checking for fixup commits for PR %s/%s#%d.\n", pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
 	commits, _, err := githubClient.PullRequests.ListCommits(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber, nil)
 	if err != nil {
 		message := fmt.Sprintf("Getting commits for PR %s/%s#%d failed", pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
