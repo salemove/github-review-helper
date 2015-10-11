@@ -91,28 +91,12 @@ func main() {
 		}
 		log.Printf("Squashing %s that's going to be merged into %s", *pr.Head.Ref, *pr.Base.Ref)
 		localRepoPath := filepath.Join(reposDir, issueComment.Repository.Owner, issueComment.Repository.Name)
-		exists, err := exists(localRepoPath)
+		repo, err := getUpdatedRepo(git, issueComment.Repository.URL, localRepoPath)
 		if err != nil {
-			log.Println("Failed to check if dir " + localRepoPath + " exists")
-			http.Error(w, "Failed check if the repo is already checked out", http.StatusInternalServerError)
+			log.Println(err)
+			http.Error(w, "Failed to update the local repo", http.StatusInternalServerError)
 			return
 		}
-		if !exists {
-			log.Printf("Cloning %s/%s into %s\n", issueComment.Repository.Owner, issueComment.Repository.Name, localRepoPath)
-			if err = exec.Command("git", "clone", issueComment.Repository.URL, localRepoPath).Run(); err != nil {
-				log.Println("The clone failed: ", err)
-				http.Error(w, "Failed to clone the repo", http.StatusInternalServerError)
-				return
-			}
-		} else {
-			log.Printf("Fetching latest changes for %s/%s\n", issueComment.Repository.Owner, issueComment.Repository.Name)
-			if err = exec.Command("git", "-C", localRepoPath, "fetch").Run(); err != nil {
-				log.Println("The fetch failed: ", err)
-				http.Error(w, "Failed to fetch the latest changes for the repo", http.StatusInternalServerError)
-				return
-			}
-		}
-		repo := git.Repo(localRepoPath)
 		if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
 			log.Println("Failed to autosquash the commits with an interactive rebase: ", err)
 			http.Error(w, "Failed to autosquash the commits with an interactive rebase", http.StatusInternalServerError)
@@ -127,6 +111,22 @@ func main() {
 	})
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+}
+
+func getUpdatedRepo(git Git, url, localPath string) (Repo, error) {
+	exists, err := exists(localPath)
+	if err != nil {
+		return repo{}, fmt.Errorf("failed to check if the repo exists locally: %v", err)
+	}
+	if !exists {
+		log.Printf("Cloning %s into %s\n", url, localPath)
+		return git.Clone(url, localPath)
+	}
+
+	log.Printf("Fetching latest changes for %s\n", url)
+	repo := git.Repo(localPath)
+	err = repo.Fetch()
+	return repo, err
 }
 
 func exists(path string) (bool, error) {

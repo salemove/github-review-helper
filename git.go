@@ -9,9 +9,11 @@ import (
 
 type Git interface {
 	Repo(path string) Repo
+	Clone(url, localPath string) (Repo, error)
 }
 
 type Repo interface {
+	Fetch() error
 	RebaseAutosquash(upstreamRef, branchRef string) error
 }
 
@@ -23,6 +25,13 @@ func NewGit() Git {
 
 func (g git) Repo(path string) Repo {
 	return repo{path}
+}
+
+func (g git) Clone(url, localPath string) (Repo, error) {
+	if err := exec.Command("git", "clone", url, localPath).Run(); err != nil {
+		return repo{}, fmt.Errorf("failed to clone: %v", err)
+	}
+	return g.Repo(localPath), nil
 }
 
 type repo struct {
@@ -43,6 +52,13 @@ func (r repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 			log.Println("Also failed to clean up after the failed rebase: ", cleanupErr)
 		}
 		return err
+	}
+	return nil
+}
+
+func (r repo) Fetch() error {
+	if err := exec.Command("git", "-C", r.path, "fetch").Run(); err != nil {
+		return fmt.Errorf("failed to fetch: %v", err)
 	}
 	return nil
 }
