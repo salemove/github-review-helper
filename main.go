@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/tylerb/graceful.v1"
@@ -89,7 +90,7 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 	pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
 	if err != nil {
 		message := fmt.Sprintf("Getting PR %s/%s#%d failed", issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
-		return ErrorResponse{err, http.StatusInternalServerError, message}
+		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
 	repo, err := git.GetUpdatedRepo(issueComment.Repository.URL, issueComment.Repository.Owner, issueComment.Repository.Name)
@@ -106,9 +107,26 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 }
 
 func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient *github.Client) Response {
-	_, err := parsePullRequestEvent(body)
+	pullRequestEvent, err := parsePullRequestEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
+	}
+	if pullRequestEvent.Action != "opened" || pullRequestEvent.Action != "synchronize" {
+		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
+	}
+	commits, _, err := githubClient.PullRequests.ListCommits(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber, nil)
+	if err != nil {
+		message := fmt.Sprintf("Getting commits for PR %s/%s#%d failed", pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
+		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	for _, commit := range commits {
+		if strings.HasPrefix(*commit.Message, "!fixup ") || strings.HasPrefix(*commit.Message, "!squash ") {
+			githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *commit.SHA, &github.RepoStatus{
+				State:       github.String("pending"),
+				Description: github.String("This commit needs to be squashed with !squash before merging"),
+				Context:     github.String("review"),
+			})
+		}
 	}
 	return SuccessResponse{}
 }
