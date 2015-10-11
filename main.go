@@ -103,6 +103,19 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 	if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
 	}
+	headSHA, err := repo.GetHeadSHA()
+	if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to get the squashed branch's HEAD's SHA"}
+	}
+	_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, headSHA, &github.RepoStatus{
+		State:       github.String("success"),
+		Description: github.String("All fixup! and squash! commits successfully squashed"),
+		Context:     github.String("review"),
+	})
+	if err != nil {
+		message := fmt.Sprintf("Failed to create a success status for commit %s", headSHA)
+		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
 	return SuccessResponse{}
 }
 
@@ -121,11 +134,15 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 	}
 	for _, commit := range commits {
 		if strings.HasPrefix(*commit.Commit.Message, "fixup! ") || strings.HasPrefix(*commit.Commit.Message, "squash! ") {
-			githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *commit.SHA, &github.RepoStatus{
+			_, _, err = githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *commit.SHA, &github.RepoStatus{
 				State:       github.String("pending"),
 				Description: github.String("This commit needs to be squashed with !squash before merging"),
 				Context:     github.String("review"),
 			})
+			if err != nil {
+				message := fmt.Sprintf("Failed to create a pending status for commit %s", *commit.SHA)
+				return ErrorResponse{err, http.StatusBadGateway, message}
+			}
 		}
 	}
 	return SuccessResponse{}

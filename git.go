@@ -18,6 +18,7 @@ type Repo interface {
 	Fetch() error
 	RebaseAutosquash(upstreamRef, branchRef string) error
 	ForcePushHeadTo(remoteRef string) error
+	GetHeadSHA() (string, error)
 }
 
 type git struct {
@@ -100,4 +101,12 @@ func (r repo) ForcePushHeadTo(remoteRef string) error {
 		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil
+}
+
+func (r repo) GetHeadSHA() (string, error) {
+	output, err := exec.Command("git", "-C", r.path, "rev-parse", "@").Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get the current HEAD's SHA: %v", err)
+	}
+	return string(output[:]), nil
 }
