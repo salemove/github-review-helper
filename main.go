@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	"gopkg.in/tylerb/graceful.v1"
@@ -41,7 +40,7 @@ func main() {
 	}
 	defer os.RemoveAll(reposDir)
 
-	git := NewGit()
+	git := NewGit(reposDir)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", Handler(func(w http.ResponseWriter, r *http.Request) Response {
@@ -77,8 +76,7 @@ func main() {
 			return ErrorResponse{err, http.StatusInternalServerError, message}
 		}
 		log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
-		localRepoPath := filepath.Join(reposDir, issueComment.Repository.Owner, issueComment.Repository.Name)
-		repo, err := getUpdatedRepo(git, issueComment.Repository.URL, localRepoPath)
+		repo, err := git.GetUpdatedRepo(issueComment.Repository.URL, issueComment.Repository.Owner, issueComment.Repository.Name)
 		if err != nil {
 			return ErrorResponse{err, http.StatusInternalServerError, "Failed to update the local repo"}
 		}
@@ -92,32 +90,6 @@ func main() {
 	}))
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
-}
-
-func getUpdatedRepo(git Git, url, localPath string) (Repo, error) {
-	exists, err := exists(localPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if the repo exists locally: %v", err)
-	}
-	if !exists {
-		log.Printf("Cloning %s into %s\n", url, localPath)
-		return git.Clone(url, localPath)
-	}
-
-	log.Printf("Fetching latest changes for %s\n", url)
-	repo := git.Repo(localPath)
-	err = repo.Fetch()
-	return repo, err
-}
-
-func exists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 func initGithubClient(accessToken string) *github.Client {

@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 type Git interface {
 	Repo(path string) Repo
 	Clone(url, localPath string) (Repo, error)
+	GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error)
 }
 
 type Repo interface {
@@ -18,10 +20,12 @@ type Repo interface {
 	ForcePushHeadTo(remoteRef string) error
 }
 
-type git struct{}
+type git struct {
+	basePath string
+}
 
-func NewGit() Git {
-	return git{}
+func NewGit(basePath string) Git {
+	return git{basePath}
 }
 
 func (g git) Repo(path string) Repo {
@@ -33,6 +37,33 @@ func (g git) Clone(url, localPath string) (Repo, error) {
 		return repo{}, fmt.Errorf("failed to clone: %v", err)
 	}
 	return g.Repo(localPath), nil
+}
+
+func (g git) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
+	localPath := filepath.Join(g.basePath, repoOwner, repoName)
+	exists, err := exists(localPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if the repo exists locally: %v", err)
+	}
+	if !exists {
+		log.Printf("Cloning %s into %s\n", url, localPath)
+		return g.Clone(url, localPath)
+	}
+
+	log.Printf("Fetching latest changes for %s\n", url)
+	repo := g.Repo(localPath)
+	err = repo.Fetch()
+	return repo, err
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type repo struct {
