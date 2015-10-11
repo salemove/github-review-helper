@@ -19,6 +19,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const githubStatusContext = "review"
+
 type IssueComment struct {
 	IssueNumber   int
 	Comment       string
@@ -102,7 +104,7 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 		_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 			State:       github.String("failure"),
 			Description: github.String("Failed to automatically squash the fixup! and squash! commits. Please squash manually"),
-			Context:     github.String("review"),
+			Context:     github.String(githubStatusContext),
 		})
 		if err != nil {
 			message := fmt.Sprintf("Failed to create a failure status for commit %s", *pr.Head.SHA)
@@ -120,7 +122,7 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 	_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, headSHA, &github.RepoStatus{
 		State:       github.String("success"),
 		Description: github.String("All fixup! and squash! commits successfully squashed"),
-		Context:     github.String("review"),
+		Context:     github.String(githubStatusContext),
 	})
 	if err != nil {
 		message := fmt.Sprintf("Failed to create a success status for commit %s", headSHA)
@@ -148,7 +150,7 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 			_, _, err = githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *commit.SHA, &github.RepoStatus{
 				State:       github.String("pending"),
 				Description: github.String("This commit needs to be squashed with !squash before merging"),
-				Context:     github.String("review"),
+				Context:     github.String(githubStatusContext),
 			})
 			if err != nil {
 				message := fmt.Sprintf("Failed to create a pending status for commit %s", *commit.SHA)
