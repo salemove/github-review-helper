@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -102,7 +101,7 @@ func main() {
 			http.Error(w, "Failed to autosquash the commits with an interactive rebase", http.StatusInternalServerError)
 			return
 		}
-		if err = exec.Command("git", "-C", localRepoPath, "push", "--force", "origin", "@:"+*pr.Head.Ref).Run(); err != nil {
+		if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
 			log.Println("Failed to push the squashed version: ", err)
 			http.Error(w, "Failed to push the squashed version", http.StatusInternalServerError)
 			return

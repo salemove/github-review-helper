@@ -15,6 +15,7 @@ type Git interface {
 type Repo interface {
 	Fetch() error
 	RebaseAutosquash(upstreamRef, branchRef string) error
+	ForcePushHeadTo(remoteRef string) error
 }
 
 type git struct{}
@@ -59,6 +60,13 @@ func (r repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 func (r repo) Fetch() error {
 	if err := exec.Command("git", "-C", r.path, "fetch").Run(); err != nil {
 		return fmt.Errorf("failed to fetch: %v", err)
+	}
+	return nil
+}
+
+func (r repo) ForcePushHeadTo(remoteRef string) error {
+	if err := exec.Command("git", "-C", r.path, "push", "--force", "origin", "@:"+remoteRef).Run(); err != nil {
+		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil
 }
