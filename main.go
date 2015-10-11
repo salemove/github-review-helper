@@ -44,70 +44,52 @@ func main() {
 	git := NewGit()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/", Handler(func(w http.ResponseWriter, r *http.Request) Response {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
-			log.Println("Failed to read the request's body")
-			http.Error(w, "", http.StatusInternalServerError)
-			return
+			return ErrorResponse{err, http.StatusInternalServerError, "Failed to read the request's body"}
 		}
 		signature := r.Header.Get("X-Hub-Signature")
 		hasSecret, err := hasSecret(body, signature, conf.Secret)
 		if err != nil {
-			log.Println("Failed to check the signature")
-			http.Error(w, "Failed to check the signature", http.StatusInternalServerError)
-			return
+			return ErrorResponse{err, http.StatusInternalServerError, "Failed to check the signature"}
 		}
 		if !hasSecret {
-			log.Println("Bad X-Hub-Signature")
-			http.Error(w, "Bad X-Hub-Signature", http.StatusBadRequest)
-			return
+			return ErrorResponse{nil, http.StatusBadRequest, "Bad X-Hub-Signature"}
 		}
 		eventType := r.Header.Get("X-Github-Event")
 		if eventType != "issue_comment" {
-			w.Write([]byte("Not an event I understand. Ignoring."))
-			return
+			return SuccessResponse{"Not an event I understand. Ignoring."}
 		}
 		issueComment, err := parseIssueComment(body)
 		if err != nil {
-			log.Println("Failed to parse the requests body")
-			http.Error(w, "", http.StatusInternalServerError)
-			return
+			return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the requests body"}
 		}
 		if !issueComment.IsPullRequest {
-			w.Write([]byte("Not a PR. Ignoring."))
-			return
+			return SuccessResponse{"Not a PR. Ignoring."}
 		}
 		if issueComment.Comment != "!squash" {
-			w.Write([]byte("Not a command I understand. Ignoring."))
-			return
+			return SuccessResponse{"Not a command I understand. Ignoring."}
 		}
 		pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
 		if err != nil {
-			log.Printf("Getting PR %s/%s#%d failed: %s\n", issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber, err.Error())
-			http.Error(w, "", http.StatusInternalServerError)
-			return
+			message := fmt.Sprintf("Getting PR %s/%s#%d failed", issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
+			return ErrorResponse{err, http.StatusInternalServerError, message}
 		}
-		log.Printf("Squashing %s that's going to be merged into %s", *pr.Head.Ref, *pr.Base.Ref)
+		log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
 		localRepoPath := filepath.Join(reposDir, issueComment.Repository.Owner, issueComment.Repository.Name)
 		repo, err := getUpdatedRepo(git, issueComment.Repository.URL, localRepoPath)
 		if err != nil {
-			log.Println(err)
-			http.Error(w, "Failed to update the local repo", http.StatusInternalServerError)
-			return
+			return ErrorResponse{err, http.StatusInternalServerError, "Failed to update the local repo"}
 		}
 		if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
-			log.Println("Failed to autosquash the commits with an interactive rebase: ", err)
-			http.Error(w, "Failed to autosquash the commits with an interactive rebase", http.StatusInternalServerError)
-			return
+			return ErrorResponse{err, http.StatusInternalServerError, "Failed to autosquash the commits with an interactive rebase"}
 		}
 		if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
-			log.Println("Failed to push the squashed version: ", err)
-			http.Error(w, "Failed to push the squashed version", http.StatusInternalServerError)
-			return
+			return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
 		}
-		w.Write([]byte{})
-	})
+		return SuccessResponse{}
+	}))
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
 }
@@ -115,7 +97,7 @@ func main() {
 func getUpdatedRepo(git Git, url, localPath string) (Repo, error) {
 	exists, err := exists(localPath)
 	if err != nil {
-		return repo{}, fmt.Errorf("failed to check if the repo exists locally: %v", err)
+		return nil, fmt.Errorf("failed to check if the repo exists locally: %v", err)
 	}
 	if !exists {
 		log.Printf("Cloning %s into %s\n", url, localPath)
