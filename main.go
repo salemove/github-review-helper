@@ -42,6 +42,8 @@ func main() {
 	}
 	defer os.RemoveAll(reposDir)
 
+	git := NewGit()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		body, err := ioutil.ReadAll(r.Body)
@@ -110,20 +112,10 @@ func main() {
 				return
 			}
 		}
-		// This makes the --interactive rebase not actually interactive
-		if err = os.Setenv("GIT_SEQUENCE_EDITOR", "true"); err != nil {
-			log.Println("Failed to change the env variable: ", err)
-			http.Error(w, "Failed to change an env variable", http.StatusInternalServerError)
-			return
-		}
-		defer os.Unsetenv("GIT_SEQUENCE_EDITOR")
-		if err = exec.Command("git", "-C", localRepoPath, "rebase", "--interactive", "--autosquash", *pr.Base.SHA, *pr.Head.SHA).Run(); err != nil {
-			log.Println("Failed to rebase: ", err, ". Trying to clean up.")
-			http.Error(w, "Failed to rebase", http.StatusInternalServerError)
-
-			if err = exec.Command("git", "-C", localRepoPath, "rebase", "--abort").Run(); err != nil {
-				log.Println("Also failed to clean up after the failed rebase: ", err)
-			}
+		repo := git.Repo(localRepoPath)
+		if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
+			log.Println("Failed to autosquash the commits with an interactive rebase: ", err)
+			http.Error(w, "Failed to autosquash the commits with an interactive rebase", http.StatusInternalServerError)
 			return
 		}
 		if err = exec.Command("git", "-C", localRepoPath, "push", "--force", "origin", "@:"+*pr.Head.Ref).Run(); err != nil {
