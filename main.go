@@ -25,6 +25,12 @@ type IssueComment struct {
 	Repository    Repository
 }
 
+type PullRequestEvent struct {
+	IssueNumber int
+	Action      string
+	Repository  Repository
+}
+
 type Repository struct {
 	Owner string
 	Name  string
@@ -57,39 +63,54 @@ func main() {
 			return ErrorResponse{nil, http.StatusBadRequest, "Bad X-Hub-Signature"}
 		}
 		eventType := r.Header.Get("X-Github-Event")
-		if eventType != "issue_comment" {
-			return SuccessResponse{"Not an event I understand. Ignoring."}
+		switch eventType {
+		case "issue_comment":
+			return handleIssueComment(w, body, git, githubClient)
+		case "pull_request":
+			return handlePullRequest(w, body, git, githubClient)
 		}
-		issueComment, err := parseIssueComment(body)
-		if err != nil {
-			return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the requests body"}
-		}
-		if !issueComment.IsPullRequest {
-			return SuccessResponse{"Not a PR. Ignoring."}
-		}
-		if issueComment.Comment != "!squash" {
-			return SuccessResponse{"Not a command I understand. Ignoring."}
-		}
-		pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
-		if err != nil {
-			message := fmt.Sprintf("Getting PR %s/%s#%d failed", issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
-			return ErrorResponse{err, http.StatusInternalServerError, message}
-		}
-		log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
-		repo, err := git.GetUpdatedRepo(issueComment.Repository.URL, issueComment.Repository.Owner, issueComment.Repository.Name)
-		if err != nil {
-			return ErrorResponse{err, http.StatusInternalServerError, "Failed to update the local repo"}
-		}
-		if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
-			return ErrorResponse{err, http.StatusInternalServerError, "Failed to autosquash the commits with an interactive rebase"}
-		}
-		if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
-			return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
-		}
-		return SuccessResponse{}
+		return SuccessResponse{"Not an event I understand. Ignoring."}
 	}))
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+}
+
+func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClient *github.Client) Response {
+	issueComment, err := parseIssueComment(body)
+	if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
+	}
+	if !issueComment.IsPullRequest {
+		return SuccessResponse{"Not a PR. Ignoring."}
+	}
+	if issueComment.Comment != "!squash" {
+		return SuccessResponse{"Not a command I understand. Ignoring."}
+	}
+	pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
+	if err != nil {
+		message := fmt.Sprintf("Getting PR %s/%s#%d failed", issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
+		return ErrorResponse{err, http.StatusInternalServerError, message}
+	}
+	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
+	repo, err := git.GetUpdatedRepo(issueComment.Repository.URL, issueComment.Repository.Owner, issueComment.Repository.Name)
+	if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to update the local repo"}
+	}
+	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to autosquash the commits with an interactive rebase"}
+	}
+	if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
+	}
+	return SuccessResponse{}
+}
+
+func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient *github.Client) Response {
+	_, err := parsePullRequestEvent(body)
+	if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
+	}
+	return SuccessResponse{}
 }
 
 func initGithubClient(accessToken string) *github.Client {
@@ -127,6 +148,36 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 		IssueNumber:   message.Issue.Number,
 		Comment:       message.Comment.Body,
 		IsPullRequest: message.Issue.PullRequest.URL != "",
+		Repository: Repository{
+			Owner: message.Repository.Owner.Login,
+			Name:  message.Repository.Name,
+			URL:   message.Repository.SSHURL,
+		},
+	}, nil
+}
+
+func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
+	var message struct {
+		Action      string `json:"action"`
+		Number      int    `json:"Number"`
+		PullRequest struct {
+			URL string `json:"url"`
+		} `json:"pull_request"`
+		Repository struct {
+			Name  string `json:"name"`
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+			SSHURL string `json:"ssh_url"`
+		} `json:"repository"`
+	}
+	err := json.Unmarshal(body, &message)
+	if err != nil {
+		return PullRequestEvent{}, err
+	}
+	return PullRequestEvent{
+		IssueNumber: message.Number,
+		Action:      message.Action,
 		Repository: Repository{
 			Owner: message.Repository.Owner.Login,
 			Name:  message.Repository.Name,
