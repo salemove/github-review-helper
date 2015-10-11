@@ -10,13 +10,15 @@ import (
 )
 
 type Git interface {
-	Repo(path string) Repo
-	Clone(url, localPath string) (Repo, error)
+	// GetUpdateRepo either clones the specified repository if it hasn't been cloned yet or simply
+	// fetches the latest changes for it. Returns the Repo in any case.
 	GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error)
 }
 
 type Repo interface {
 	Fetch() error
+	// Runs `git rebase --interactive --autosquash` for the given refs and automatically saves and closes
+	// the editor for interactive rebase.
 	RebaseAutosquash(upstreamRef, branchRef string) error
 	ForcePushHeadTo(remoteRef string) error
 	GetHeadSHA() (string, error)
@@ -26,19 +28,20 @@ type git struct {
 	basePath string
 }
 
+// NewGit creates a new Git implementation which will hold all its repos in the specified base path
 func NewGit(basePath string) Git {
 	return git{basePath}
 }
 
-func (g git) Repo(path string) Repo {
+func (g git) repo(path string) Repo {
 	return repo{path}
 }
 
-func (g git) Clone(url, localPath string) (Repo, error) {
+func (g git) clone(url, localPath string) (Repo, error) {
 	if err := exec.Command("git", "clone", url, localPath).Run(); err != nil {
 		return repo{}, fmt.Errorf("failed to clone: %v", err)
 	}
-	return g.Repo(localPath), nil
+	return g.repo(localPath), nil
 }
 
 func (g git) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
@@ -49,11 +52,11 @@ func (g git) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
 	}
 	if !exists {
 		log.Printf("Cloning %s into %s\n", url, localPath)
-		return g.Clone(url, localPath)
+		return g.clone(url, localPath)
 	}
 
 	log.Printf("Fetching latest changes for %s\n", url)
-	repo := g.Repo(localPath)
+	repo := g.repo(localPath)
 	err = repo.Fetch()
 	return repo, err
 }
