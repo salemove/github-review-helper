@@ -98,7 +98,17 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to update the local repo"}
 	}
 	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
-		return ErrorResponse{err, http.StatusInternalServerError, "Failed to autosquash the commits with an interactive rebase"}
+		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
+		_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+			State:       github.String("failure"),
+			Description: github.String("Failed to automatically squash the fixup! and squash! commits. Please squash manually"),
+			Context:     github.String("review"),
+		})
+		if err != nil {
+			message := fmt.Sprintf("Failed to create a failure status for commit %s", *pr.Head.SHA)
+			return ErrorResponse{err, http.StatusBadGateway, message}
+		}
+		return SuccessResponse{"Failed to autosquash the commits with an interactive rebase. Reported the failure."}
 	}
 	if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
