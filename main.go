@@ -89,7 +89,7 @@ func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories
 }
 
 // startsWithPlusOne matches strings that start with either a +1 (not followed by other digits) or a :+1: emoji
-var startsWithPlusOne = regexp.MustCompile("^(:\\+1:|\\+1($|\\D))")
+var startsWithPlusOne = regexp.MustCompile(`^(:\+1:|\+1($|\D))`)
 
 func handleIssueComment(w http.ResponseWriter, body []byte, git Git, pullRequests PullRequests, repositories Repositories) Response {
 	issueComment, err := parseIssueComment(body)
