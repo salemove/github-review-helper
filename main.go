@@ -68,12 +68,14 @@ func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories
 			return ErrorResponse{err, http.StatusInternalServerError, "Failed to read the request's body"}
 		}
 		signature := r.Header.Get("X-Hub-Signature")
+		if signature == "" {
+			return ErrorResponse{nil, http.StatusUnauthorized, "Please provide a X-Hub-Signature"}
+		}
 		hasSecret, err := hasSecret(body, signature, conf.Secret)
 		if err != nil {
 			return ErrorResponse{err, http.StatusInternalServerError, "Failed to check the signature"}
-		}
-		if !hasSecret {
-			return ErrorResponse{nil, http.StatusBadRequest, "Bad X-Hub-Signature"}
+		} else if !hasSecret {
+			return ErrorResponse{nil, http.StatusForbidden, "Bad X-Hub-Signature"}
 		}
 		eventType := r.Header.Get("X-Github-Event")
 		switch eventType {

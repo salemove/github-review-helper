@@ -31,6 +31,7 @@ var _ = Describe("github-review-helper", func() {
 			git = new(MockGit)
 			pullRequests = new(MockPullRequests)
 			repositories = new(MockRepositories)
+			headers = make(map[string][]string)
 
 			responseRecorder = httptest.NewRecorder()
 		})
@@ -55,9 +56,48 @@ var _ = Describe("github-review-helper", func() {
 			}
 		})
 
-		It("fails with StatusBadRequest if no headers set", func() {
+		It("fails with StatusUnauthorized if no headers set", func() {
 			handle()
-			Expect(responseRecorder.Code).To(Equal(http.StatusBadRequest))
+			Expect(responseRecorder.Code).To(Equal(http.StatusUnauthorized))
+		})
+
+		Context("with an invalid X-Hub-Signature header", func() {
+			BeforeEach(func() {
+				requestJSON = "{}"
+				conf.Secret = "a-secret"
+				headers["X-Hub-Signature"] = []string{"sha1=2f539a59127d552f4565b1a114ec8f4fa2d55f55"}
+			})
+
+			It("fails with StatusForbidden", func() {
+				handle()
+				Expect(responseRecorder.Code).To(Equal(http.StatusForbidden))
+			})
+		})
+
+		Context("with an empty request with a proper signature", func() {
+			BeforeEach(func() {
+				requestJSON = "{}"
+				conf.Secret = "a-secret"
+				headers["X-Hub-Signature"] = []string{"sha1=33c829a9c355e7722cb74d25dfa54c6c623cde63"}
+			})
+
+			It("succeeds with a message that says the request is ignored", func() {
+				handle()
+				Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+				Expect(responseRecorder.Body.String()).To(ContainSubstring("Ignoring"))
+			})
+
+			Context("with a gibberish event", func() {
+				BeforeEach(func() {
+					headers["X-Github-Event"] = []string{"gibberish"}
+				})
+
+				It("succeeds with a message that says the request is ignored", func() {
+					handle()
+					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					Expect(responseRecorder.Body.String()).To(ContainSubstring("Ignoring"))
+				})
+			})
 		})
 	})
 })
