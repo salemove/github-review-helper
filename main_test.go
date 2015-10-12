@@ -127,7 +127,6 @@ var _ = Describe("github-review-helper", func() {
 				Context("with an arbitrary comment", func() {
 					BeforeEach(func() {
 						requestJSON = `{
-  "action": "created",
   "issue": {
     "number": 7,
     "pull_request": {
@@ -158,7 +157,6 @@ var _ = Describe("github-review-helper", func() {
 				Context("with a !squash comment", func() {
 					BeforeEach(func() {
 						requestJSON = `{
-  "action": "created",
   "issue": {
     "number": 7,
     "pull_request": {
@@ -249,7 +247,6 @@ var _ = Describe("github-review-helper", func() {
 				Context("with a +1 comment", func() {
 					BeforeEach(func() {
 						requestJSON = `{
-  "action": "created",
   "issue": {
     "number": 7,
     "pull_request": {
@@ -300,6 +297,133 @@ var _ = Describe("github-review-helper", func() {
 							status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
 							Expect(*status.State).To(Equal("success"))
 							Expect(*status.Context).To(Equal("review/peer"))
+						})
+					})
+				})
+			})
+
+			Describe("pull_request event", func() {
+				BeforeEach(func() {
+					headers["X-Github-Event"] = []string{"pull_request"}
+				})
+
+				Context("with the PR being closed", func() {
+					BeforeEach(func() {
+						requestJSON = `{
+  "action": "closed",
+  "number": 7,
+  "pull_request": {
+    "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
+  },
+  "comment": {
+    "body": "just a simple comment"
+  },
+  "repository": {
+    "name": "github-review-helper",
+    "owner": {
+      "login": "salemove"
+    },
+    "ssh_url": "git@github.com:salemove/github-review-helper.git"
+  }
+}`
+						mockSignature()
+					})
+
+					It("succeeds with a message that says the request is ignored as PR not opened/synchronized", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						Expect(responseRecorder.Body.String()).To(ContainSubstring("Ignoring"))
+					})
+				})
+
+				Context("with the PR being synchronized", func() {
+					BeforeEach(func() {
+						requestJSON = `{
+  "action": "synchronize",
+  "number": 7,
+  "pull_request": {
+    "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
+  },
+  "comment": {
+    "body": "just a simple comment"
+  },
+  "repository": {
+    "name": "github-review-helper",
+    "owner": {
+      "login": "salemove"
+    },
+    "ssh_url": "git@github.com:salemove/github-review-helper.git"
+  }
+}`
+						mockSignature()
+					})
+
+					Context("with GitHub request to list commits failing", func() {
+						BeforeEach(func() {
+							var listOptions *github.ListOptions
+							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return(nil, nil, errors.New("an error"))
+						})
+
+						It("fails with a gateway error", func() {
+							handle()
+							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+						})
+					})
+
+					Context("with list of commits from GitHub NOT including fixup commits", func() {
+						BeforeEach(func() {
+							var listOptions *github.ListOptions
+							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return([]github.RepositoryCommit{
+								github.RepositoryCommit{
+									Commit: &github.Commit{
+										Message: github.String("Changing things"),
+									},
+								},
+								github.RepositoryCommit{
+									Commit: &github.Commit{
+										Message: github.String("Another casual commit"),
+									},
+								},
+							}, nil, nil)
+						})
+
+						It("succeeds", func() {
+							handle()
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						})
+					})
+
+					Context("with list of commits from GitHub including fixup commits", func() {
+						BeforeEach(func() {
+							var listOptions *github.ListOptions
+							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return([]github.RepositoryCommit{
+								github.RepositoryCommit{
+									Commit: &github.Commit{
+										Message: github.String("Changing things"),
+									},
+								},
+								github.RepositoryCommit{
+									Commit: &github.Commit{
+										Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
+									},
+								},
+							}, nil, nil)
+							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+								Head: &github.PullRequestBranch{
+									SHA: github.String("1235"),
+								},
+							}, nil, nil)
+						})
+
+						It("reports pending squash status to GitHub and succeeds", func() {
+							repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+
+							handle()
+
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
+							Expect(*status.State).To(Equal("pending"))
+							Expect(*status.Context).To(Equal("review/squash"))
 						})
 					})
 				})
