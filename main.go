@@ -150,20 +150,32 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 		message := fmt.Sprintf("Getting commits for PR %s/%s#%d failed", pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
-	for _, commit := range commits {
-		if strings.HasPrefix(*commit.Commit.Message, "fixup! ") || strings.HasPrefix(*commit.Commit.Message, "squash! ") {
-			_, _, err = githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *commit.SHA, &github.RepoStatus{
-				State:       github.String("pending"),
-				Description: github.String("This commit needs to be squashed with !squash before merging"),
-				Context:     github.String(githubStatusContext),
-			})
-			if err != nil {
-				message := fmt.Sprintf("Failed to create a pending status for commit %s", *commit.SHA)
-				return ErrorResponse{err, http.StatusBadGateway, message}
-			}
+	if includesFixupCommits(commits) {
+		pr, _, err := githubClient.PullRequests.Get(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
+		if err != nil {
+			message := fmt.Sprintf("Getting PR %s/%s#%d failed", pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
+			return ErrorResponse{err, http.StatusBadGateway, message}
+		}
+		_, _, err = githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+			State:       github.String("pending"),
+			Description: github.String("This PR needs to be squashed with !squash before merging"),
+			Context:     github.String(githubStatusContext),
+		})
+		if err != nil {
+			message := fmt.Sprintf("Failed to create a pending status for commit %s", *pr.Head.SHA)
+			return ErrorResponse{err, http.StatusBadGateway, message}
 		}
 	}
 	return SuccessResponse{}
+}
+
+func includesFixupCommits(commits []github.RepositoryCommit) bool {
+	for _, commit := range commits {
+		if strings.HasPrefix(*commit.Commit.Message, "fixup! ") || strings.HasPrefix(*commit.Commit.Message, "squash! ") {
+			return true
+		}
+	}
+	return false
 }
 
 func initGithubClient(accessToken string) *github.Client {
