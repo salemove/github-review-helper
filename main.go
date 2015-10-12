@@ -56,7 +56,13 @@ func main() {
 	git := NewGit(reposDir)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", Handler(func(w http.ResponseWriter, r *http.Request) Response {
+	mux.Handle("/", CreateHandler(conf, git, githubClient))
+
+	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+}
+
+func CreateHandler(conf Config, git Git, githubClient *github.Client) Handler {
+	return func(w http.ResponseWriter, r *http.Request) Response {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			return ErrorResponse{err, http.StatusInternalServerError, "Failed to read the request's body"}
@@ -74,12 +80,10 @@ func main() {
 		case "issue_comment":
 			return handleIssueComment(w, body, git, githubClient)
 		case "pull_request":
-			return handlePullRequest(w, body, git, githubClient)
+			return handlePullRequest(w, body, githubClient)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
-	}))
-
-	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+	}
 }
 
 // startsWithPlusOne matches strings that start with either a +1 (not followed by other digits) or a :+1: emoji
@@ -97,7 +101,7 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 	case issueComment.Comment == "!squash":
 		return handleSquash(w, issueComment, git, githubClient)
 	case startsWithPlusOne.MatchString(issueComment.Comment):
-		return handlePlusOne(w, issueComment, git, githubClient)
+		return handlePlusOne(w, issueComment, githubClient)
 	}
 	return SuccessResponse{"Not a command I understand. Ignoring."}
 }
@@ -145,7 +149,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, git
 	return SuccessResponse{}
 }
 
-func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, git Git, githubClient *github.Client) Response {
+func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, githubClient *github.Client) Response {
 	pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
 	if err != nil {
 		message := fmt.Sprintf("Getting PR %s failed", issueComment.PullRequestName())
@@ -164,7 +168,7 @@ func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, git Git, gi
 	return SuccessResponse{}
 }
 
-func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient *github.Client) Response {
+func handlePullRequest(w http.ResponseWriter, body []byte, githubClient *github.Client) Response {
 	pullRequestEvent, err := parsePullRequestEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
