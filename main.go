@@ -19,7 +19,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const githubStatusContext = "review"
+const githubStatusSquashContext = "review/squash"
 
 type IssueComment struct {
 	IssueNumber   int
@@ -109,7 +109,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, git
 		_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 			State:       github.String("failure"),
 			Description: github.String("Failed to automatically squash the fixup! and squash! commits. Please squash manually"),
-			Context:     github.String(githubStatusContext),
+			Context:     github.String(githubStatusSquashContext),
 		})
 		if err != nil {
 			message := fmt.Sprintf("Failed to create a failure status for commit %s", *pr.Head.SHA)
@@ -127,7 +127,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, git
 	_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, headSHA, &github.RepoStatus{
 		State:       github.String("success"),
 		Description: github.String("All fixup! and squash! commits successfully squashed"),
-		Context:     github.String(githubStatusContext),
+		Context:     github.String(githubStatusSquashContext),
 	})
 	if err != nil {
 		message := fmt.Sprintf("Failed to create a success status for commit %s", headSHA)
@@ -159,7 +159,7 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 		_, _, err = githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 			State:       github.String("pending"),
 			Description: github.String("This PR needs to be squashed with !squash before merging"),
-			Context:     github.String(githubStatusContext),
+			Context:     github.String(githubStatusSquashContext),
 		})
 		if err != nil {
 			message := fmt.Sprintf("Failed to create a pending status for commit %s", *pr.Head.SHA)
