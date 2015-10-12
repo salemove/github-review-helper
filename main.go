@@ -86,9 +86,14 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 	if !issueComment.IsPullRequest {
 		return SuccessResponse{"Not a PR. Ignoring."}
 	}
-	if issueComment.Comment != "!squash" {
-		return SuccessResponse{"Not a command I understand. Ignoring."}
+	switch issueComment.Comment {
+	case "!squash":
+		return handleSquash(w, issueComment, git, githubClient)
 	}
+	return SuccessResponse{"Not a command I understand. Ignoring."}
+}
+
+func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, githubClient *github.Client) Response {
 	pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
 	if err != nil {
 		message := fmt.Sprintf("Getting PR %s/%s#%d failed", issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
