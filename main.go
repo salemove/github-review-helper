@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,7 +20,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const githubStatusSquashContext = "review/squash"
+const (
+	githubStatusSquashContext     = "review/squash"
+	githubStatusPeerReviewContext = "review/peer"
+)
 
 type IssueComment struct {
 	IssueNumber   int
@@ -78,6 +82,9 @@ func main() {
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
 }
 
+// startsWithPlusOne matches strings that start with either a +1 (not followed by other digits) or a :+1: emoji
+var startsWithPlusOne = regexp.MustCompile("^(:\\+1:|\\+1($|\\D))")
+
 func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClient *github.Client) Response {
 	issueComment, err := parseIssueComment(body)
 	if err != nil {
@@ -86,9 +93,11 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 	if !issueComment.IsPullRequest {
 		return SuccessResponse{"Not a PR. Ignoring."}
 	}
-	switch issueComment.Comment {
-	case "!squash":
+	switch {
+	case issueComment.Comment == "!squash":
 		return handleSquash(w, issueComment, git, githubClient)
+	case startsWithPlusOne.MatchString(issueComment.Comment):
+		return handlePlusOne(w, issueComment, git, githubClient)
 	}
 	return SuccessResponse{"Not a command I understand. Ignoring."}
 }
@@ -131,6 +140,25 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, git
 	})
 	if err != nil {
 		message := fmt.Sprintf("Failed to create a success status for commit %s", headSHA)
+		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	return SuccessResponse{}
+}
+
+func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, git Git, githubClient *github.Client) Response {
+	pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
+	if err != nil {
+		message := fmt.Sprintf("Getting PR %s failed", issueComment.PullRequestName())
+		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	log.Printf("Marking PR %s as peer reviewed\n", issueComment.PullRequestName())
+	_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+		State:       github.String("success"),
+		Description: github.String("This PR has been peer reviewed"),
+		Context:     github.String(githubStatusPeerReviewContext),
+	})
+	if err != nil {
+		message := fmt.Sprintf("Failed to create a success status for commit %s", *pr.Head.SHA)
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	return SuccessResponse{}
