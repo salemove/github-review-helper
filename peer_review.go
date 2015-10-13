@@ -6,7 +6,7 @@ import (
 	"github.com/google/go-github/github"
 )
 
-func handlePlusOne(issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
+func handlePlusOneComment(issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
 	log.Printf("Marking PR %s as peer reviewed\n", issueComment.Issue().FullName())
 	status := createPeerReviewStatus("success", "This PR has been peer reviewed")
 	if errResp := setPRHeadStatus(issueComment, status, pullRequests, repositories); errResp != nil {

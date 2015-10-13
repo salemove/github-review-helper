@@ -8,7 +8,7 @@ import (
 	"github.com/google/go-github/github"
 )
 
-func handleSquash(issueComment IssueComment, git Git, pullRequests PullRequests, repositories Repositories) Response {
+func handleSquashCommand(issueComment IssueComment, git Git, pullRequests PullRequests, repositories Repositories) Response {
 	pr, errResp := getPR(issueComment, pullRequests)
 	if errResp != nil {
 		return errResp
