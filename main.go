@@ -145,50 +145,43 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 	}
 	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
-		_, _, err = repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+		status := &github.RepoStatus{
 			State:       github.String("failure"),
 			Description: github.String("Failed to automatically squash the fixup! and squash! commits. Please squash manually"),
 			Context:     github.String(githubStatusSquashContext),
-		})
-		if err != nil {
-			message := fmt.Sprintf("Failed to create a failure status for commit %s", *pr.Head.SHA)
-			return ErrorResponse{err, http.StatusBadGateway, message}
+		}
+		if errResponse := setStatus(issueComment.Repository, *pr.Head.SHA, status, repositories); errResponse != nil {
+			return errResponse
 		}
 		return SuccessResponse{"Failed to autosquash the commits with an interactive rebase. Reported the failure."}
 	}
 	if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
 	}
-	headSHA, err := repo.GetHeadSHA()
+	squashedHeadSHA, err := repo.GetHeadSHA()
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to get the squashed branch's HEAD's SHA"}
 	}
-	_, _, err = repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, headSHA, &github.RepoStatus{
+	status := &github.RepoStatus{
 		State:       github.String("success"),
 		Description: github.String("All fixup! and squash! commits successfully squashed"),
 		Context:     github.String(githubStatusSquashContext),
-	})
-	if err != nil {
-		message := fmt.Sprintf("Failed to create a success status for commit %s", headSHA)
-		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	if errResponse := setStatus(issueComment.Repository, squashedHeadSHA, status, repositories); errResponse != nil {
+		return errResponse
 	}
 	return SuccessResponse{}
 }
 
 func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
-	pr, errResponse := getPR(issueComment, pullRequests)
-	if errResponse != nil {
-		return errResponse
-	}
 	log.Printf("Marking PR %s as peer reviewed\n", issueComment.Issue().FullName())
-	_, _, err := repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+	status := &github.RepoStatus{
 		State:       github.String("success"),
 		Description: github.String("This PR has been peer reviewed"),
 		Context:     github.String(githubStatusPeerReviewContext),
-	})
-	if err != nil {
-		message := fmt.Sprintf("Failed to create a success status for commit %s", *pr.Head.SHA)
-		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	if errResponse := setPRHeadStatus(issueComment, status, pullRequests, repositories); errResponse != nil {
+		return errResponse
 	}
 	return SuccessResponse{}
 }
@@ -209,18 +202,13 @@ func handlePullRequest(w http.ResponseWriter, body []byte, pullRequests PullRequ
 	if !includesFixupCommits(commits) {
 		return SuccessResponse{}
 	}
-	pr, errResponse := getPR(pullRequestEvent, pullRequests)
-	if errResponse != nil {
-		return errResponse
-	}
-	_, _, err = repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+	status := &github.RepoStatus{
 		State:       github.String("pending"),
 		Description: github.String("This PR needs to be squashed with !squash before merging"),
 		Context:     github.String(githubStatusSquashContext),
-	})
-	if err != nil {
-		message := fmt.Sprintf("Failed to create a pending status for commit %s", *pr.Head.SHA)
-		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	if errResponse := setPRHeadStatus(pullRequestEvent, status, pullRequests, repositories); errResponse != nil {
+		return errResponse
 	}
 	return SuccessResponse{}
 }
@@ -232,6 +220,24 @@ func includesFixupCommits(commits []github.RepositoryCommit) bool {
 		}
 	}
 	return false
+}
+
+func setPRHeadStatus(issueable Issueable, status *github.RepoStatus, pullRequests PullRequests, repositories Repositories) *ErrorResponse {
+	pr, errResponse := getPR(issueable, pullRequests)
+	if errResponse != nil {
+		return errResponse
+	}
+	repository := issueable.Issue().Repository
+	return setStatus(repository, *pr.Head.SHA, status, repositories)
+}
+
+func setStatus(repository Repository, commitRef string, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
+	_, _, err := repositories.CreateStatus(repository.Owner, repository.Name, commitRef, status)
+	if err != nil {
+		message := fmt.Sprintf("Failed to create a %s status for commit %s", *status.State, commitRef)
+		return &ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	return nil
 }
 
 func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest, *ErrorResponse) {
