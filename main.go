@@ -134,9 +134,9 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, pullRequest
 }
 
 func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pullRequests PullRequests, repositories Repositories) Response {
-	pr, errResponse := getPR(issueComment, pullRequests)
-	if errResponse != nil {
-		return errResponse
+	pr, errResp := getPR(issueComment, pullRequests)
+	if errResp != nil {
+		return errResp
 	}
 	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
 	repo, err := git.GetUpdatedRepo(issueComment.Repository.URL, issueComment.Repository.Owner, issueComment.Repository.Name)
@@ -146,8 +146,8 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
 		status := createSquashStatus("failure", "Failed to automatically squash the fixup! and squash! commits. Please squash manually")
-		if errResponse := setStatus(issueComment.Repository, *pr.Head.SHA, status, repositories); errResponse != nil {
-			return errResponse
+		if errResp := setStatus(issueComment.Repository, *pr.Head.SHA, status, repositories); errResp != nil {
+			return errResp
 		}
 		return SuccessResponse{"Failed to autosquash the commits with an interactive rebase. Reported the failure."}
 	}
@@ -159,8 +159,8 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to get the squashed branch's HEAD's SHA"}
 	}
 	status := createSquashStatus("success", "All fixup! and squash! commits successfully squashed")
-	if errResponse := setStatus(issueComment.Repository, squashedHeadSHA, status, repositories); errResponse != nil {
-		return errResponse
+	if errResp := setStatus(issueComment.Repository, squashedHeadSHA, status, repositories); errResp != nil {
+		return errResp
 	}
 	return SuccessResponse{}
 }
@@ -168,8 +168,8 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
 	log.Printf("Marking PR %s as peer reviewed\n", issueComment.Issue().FullName())
 	status := createPeerReviewStatus("success", "This PR has been peer reviewed")
-	if errResponse := setPRHeadStatus(issueComment, status, pullRequests, repositories); errResponse != nil {
-		return errResponse
+	if errResp := setPRHeadStatus(issueComment, status, pullRequests, repositories); errResp != nil {
+		return errResp
 	}
 	return SuccessResponse{}
 }
@@ -183,16 +183,16 @@ func handlePullRequest(w http.ResponseWriter, body []byte, pullRequests PullRequ
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
 	log.Printf("Checking for fixup commits for PR %s.\n", pullRequestEvent.Issue().FullName())
-	commits, errResponse := getCommits(pullRequestEvent, pullRequests)
-	if errResponse != nil {
-		return errResponse
+	commits, errResp := getCommits(pullRequestEvent, pullRequests)
+	if errResp != nil {
+		return errResp
 	}
 	if !includesFixupCommits(commits) {
 		return SuccessResponse{}
 	}
 	status := createSquashStatus("pending", "This PR needs to be squashed with !squash before merging")
-	if errResponse := setPRHeadStatus(pullRequestEvent, status, pullRequests, repositories); errResponse != nil {
-		return errResponse
+	if errResp := setPRHeadStatus(pullRequestEvent, status, pullRequests, repositories); errResp != nil {
+		return errResp
 	}
 	return SuccessResponse{}
 }
@@ -207,9 +207,9 @@ func includesFixupCommits(commits []github.RepositoryCommit) bool {
 }
 
 func setPRHeadStatus(issueable Issueable, status *github.RepoStatus, pullRequests PullRequests, repositories Repositories) *ErrorResponse {
-	pr, errResponse := getPR(issueable, pullRequests)
-	if errResponse != nil {
-		return errResponse
+	pr, errResp := getPR(issueable, pullRequests)
+	if errResp != nil {
+		return errResp
 	}
 	repository := issueable.Issue().Repository
 	return setStatus(repository, *pr.Head.SHA, status, repositories)
