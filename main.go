@@ -145,11 +145,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 	}
 	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
-		status := &github.RepoStatus{
-			State:       github.String("failure"),
-			Description: github.String("Failed to automatically squash the fixup! and squash! commits. Please squash manually"),
-			Context:     github.String(githubStatusSquashContext),
-		}
+		status := createSquashStatus("failure", "Failed to automatically squash the fixup! and squash! commits. Please squash manually")
 		if errResponse := setStatus(issueComment.Repository, *pr.Head.SHA, status, repositories); errResponse != nil {
 			return errResponse
 		}
@@ -162,11 +158,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to get the squashed branch's HEAD's SHA"}
 	}
-	status := &github.RepoStatus{
-		State:       github.String("success"),
-		Description: github.String("All fixup! and squash! commits successfully squashed"),
-		Context:     github.String(githubStatusSquashContext),
-	}
+	status := createSquashStatus("success", "All fixup! and squash! commits successfully squashed")
 	if errResponse := setStatus(issueComment.Repository, squashedHeadSHA, status, repositories); errResponse != nil {
 		return errResponse
 	}
@@ -175,11 +167,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 
 func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
 	log.Printf("Marking PR %s as peer reviewed\n", issueComment.Issue().FullName())
-	status := &github.RepoStatus{
-		State:       github.String("success"),
-		Description: github.String("This PR has been peer reviewed"),
-		Context:     github.String(githubStatusPeerReviewContext),
-	}
+	status := createPeerReviewStatus("success", "This PR has been peer reviewed")
 	if errResponse := setPRHeadStatus(issueComment, status, pullRequests, repositories); errResponse != nil {
 		return errResponse
 	}
@@ -202,11 +190,7 @@ func handlePullRequest(w http.ResponseWriter, body []byte, pullRequests PullRequ
 	if !includesFixupCommits(commits) {
 		return SuccessResponse{}
 	}
-	status := &github.RepoStatus{
-		State:       github.String("pending"),
-		Description: github.String("This PR needs to be squashed with !squash before merging"),
-		Context:     github.String(githubStatusSquashContext),
-	}
+	status := createSquashStatus("pending", "This PR needs to be squashed with !squash before merging")
 	if errResponse := setPRHeadStatus(pullRequestEvent, status, pullRequests, repositories); errResponse != nil {
 		return errResponse
 	}
@@ -258,6 +242,22 @@ func getCommits(issueable Issueable, pullRequests PullRequests) ([]github.Reposi
 		return nil, &ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	return commits, nil
+}
+
+func createPeerReviewStatus(state, description string) *github.RepoStatus {
+	return &github.RepoStatus{
+		State:       github.String(state),
+		Description: github.String(description),
+		Context:     github.String(githubStatusPeerReviewContext),
+	}
+}
+
+func createSquashStatus(state, description string) *github.RepoStatus {
+	return &github.RepoStatus{
+		State:       github.String(state),
+		Description: github.String(description),
+		Context:     github.String(githubStatusSquashContext),
+	}
 }
 
 func initGithubClient(accessToken string) *github.Client {
