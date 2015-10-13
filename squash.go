@@ -20,7 +20,7 @@ func handleSquash(issueComment IssueComment, git Git, pullRequests PullRequests,
 	}
 	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
-		status := createSquashStatus("failure", "Failed to automatically squash the fixup! and squash! commits. Please squash manually")
+		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
 		if errResp := setStatus(issueComment.Repository, *pr.Head.SHA, status, repositories); errResp != nil {
 			return errResp
 		}
