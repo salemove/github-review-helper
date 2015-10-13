@@ -206,20 +206,21 @@ func handlePullRequest(w http.ResponseWriter, body []byte, pullRequests PullRequ
 	if errResponse != nil {
 		return errResponse
 	}
-	if includesFixupCommits(commits) {
-		pr, errResponse := getPR(pullRequestEvent, pullRequests)
-		if errResponse != nil {
-			return errResponse
-		}
-		_, _, err = repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
-			State:       github.String("pending"),
-			Description: github.String("This PR needs to be squashed with !squash before merging"),
-			Context:     github.String(githubStatusSquashContext),
-		})
-		if err != nil {
-			message := fmt.Sprintf("Failed to create a pending status for commit %s", *pr.Head.SHA)
-			return ErrorResponse{err, http.StatusBadGateway, message}
-		}
+	if !includesFixupCommits(commits) {
+		return SuccessResponse{}
+	}
+	pr, errResponse := getPR(pullRequestEvent, pullRequests)
+	if errResponse != nil {
+		return errResponse
+	}
+	_, _, err = repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+		State:       github.String("pending"),
+		Description: github.String("This PR needs to be squashed with !squash before merging"),
+		Context:     github.String(githubStatusSquashContext),
+	})
+	if err != nil {
+		message := fmt.Sprintf("Failed to create a pending status for commit %s", *pr.Head.SHA)
+		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	return SuccessResponse{}
 }
