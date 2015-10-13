@@ -25,23 +25,48 @@ const (
 	githubStatusPeerReviewContext = "review/peer"
 )
 
-type IssueComment struct {
-	IssueNumber   int
-	Comment       string
-	IsPullRequest bool
-	Repository    Repository
+type (
+	Issue struct {
+		Number     int
+		Repository Repository
+	}
+
+	Issueable interface {
+		Issue() Issue
+	}
+
+	IssueComment struct {
+		IssueNumber   int
+		Comment       string
+		IsPullRequest bool
+		Repository    Repository
+	}
+
+	PullRequestEvent struct {
+		IssueNumber int
+		Action      string
+		Repository  Repository
+	}
+
+	Repository struct {
+		Owner string
+		Name  string
+		URL   string
+	}
+)
+
+func (i IssueComment) Issue() Issue {
+	return Issue{
+		Number:     i.IssueNumber,
+		Repository: i.Repository,
+	}
 }
 
-type PullRequestEvent struct {
-	IssueNumber int
-	Action      string
-	Repository  Repository
-}
-
-type Repository struct {
-	Owner string
-	Name  string
-	URL   string
+func (p PullRequestEvent) Issue() Issue {
+	return Issue{
+		Number:     p.IssueNumber,
+		Repository: p.Repository,
+	}
 }
 
 func main() {
@@ -109,10 +134,9 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, pullRequest
 }
 
 func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pullRequests PullRequests, repositories Repositories) Response {
-	pr, _, err := pullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
-	if err != nil {
-		message := fmt.Sprintf("Getting PR %s failed", issueComment.PullRequestName())
-		return ErrorResponse{err, http.StatusBadGateway, message}
+	pr, errResponse := getPR(issueComment, pullRequests)
+	if errResponse != nil {
+		return errResponse
 	}
 	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
 	repo, err := git.GetUpdatedRepo(issueComment.Repository.URL, issueComment.Repository.Owner, issueComment.Repository.Name)
@@ -152,13 +176,12 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pul
 }
 
 func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
-	pr, _, err := pullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
-	if err != nil {
-		message := fmt.Sprintf("Getting PR %s failed", issueComment.PullRequestName())
-		return ErrorResponse{err, http.StatusBadGateway, message}
+	pr, errResponse := getPR(issueComment, pullRequests)
+	if errResponse != nil {
+		return errResponse
 	}
-	log.Printf("Marking PR %s as peer reviewed\n", issueComment.PullRequestName())
-	_, _, err = repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+	log.Printf("Marking PR %s as peer reviewed\n", issueComment.Issue().FullName())
+	_, _, err := repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 		State:       github.String("success"),
 		Description: github.String("This PR has been peer reviewed"),
 		Context:     github.String(githubStatusPeerReviewContext),
@@ -178,17 +201,15 @@ func handlePullRequest(w http.ResponseWriter, body []byte, pullRequests PullRequ
 	if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
-	log.Printf("Checking for fixup commits for PR %s.\n", pullRequestEvent.PullRequestName())
-	commits, _, err := pullRequests.ListCommits(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber, nil)
-	if err != nil {
-		message := fmt.Sprintf("Getting commits for PR %s failed", pullRequestEvent.PullRequestName())
-		return ErrorResponse{err, http.StatusBadGateway, message}
+	log.Printf("Checking for fixup commits for PR %s.\n", pullRequestEvent.Issue().FullName())
+	commits, errResponse := getCommits(pullRequestEvent, pullRequests)
+	if errResponse != nil {
+		return errResponse
 	}
 	if includesFixupCommits(commits) {
-		pr, _, err := pullRequests.Get(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
-		if err != nil {
-			message := fmt.Sprintf("Getting PR %s failed", pullRequestEvent.PullRequestName())
-			return ErrorResponse{err, http.StatusBadGateway, message}
+		pr, errResponse := getPR(pullRequestEvent, pullRequests)
+		if errResponse != nil {
+			return errResponse
 		}
 		_, _, err = repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 			State:       github.String("pending"),
@@ -210,6 +231,26 @@ func includesFixupCommits(commits []github.RepositoryCommit) bool {
 		}
 	}
 	return false
+}
+
+func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest, *ErrorResponse) {
+	issue := issueable.Issue()
+	pr, _, err := pullRequests.Get(issue.Repository.Owner, issue.Repository.Name, issue.Number)
+	if err != nil {
+		message := fmt.Sprintf("Getting PR %s failed", issue.FullName())
+		return nil, &ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	return pr, nil
+}
+
+func getCommits(issueable Issueable, pullRequests PullRequests) ([]github.RepositoryCommit, *ErrorResponse) {
+	issue := issueable.Issue()
+	commits, _, err := pullRequests.ListCommits(issue.Repository.Owner, issue.Repository.Name, issue.Number, nil)
+	if err != nil {
+		message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
+		return nil, &ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	return commits, nil
 }
 
 func initGithubClient(accessToken string) *github.Client {
@@ -299,10 +340,6 @@ func hasSecret(message []byte, signature, key string) (bool, error) {
 	return hmac.Equal(messageMAC, expectedMAC), nil
 }
 
-func (i IssueComment) PullRequestName() string {
-	return fmt.Sprintf("%s/%s#%d", i.Repository.Owner, i.Repository.Name, i.IssueNumber)
-}
-
-func (p PullRequestEvent) PullRequestName() string {
-	return fmt.Sprintf("%s/%s#%d", p.Repository.Owner, p.Repository.Name, p.IssueNumber)
+func (i Issue) FullName() string {
+	return fmt.Sprintf("%s/%s#%d", i.Repository.Owner, i.Repository.Name, i.Number)
 }
