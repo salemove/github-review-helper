@@ -50,7 +50,7 @@ func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories
 		case "issue_comment":
 			return handleIssueComment(body, git, pullRequests, repositories)
 		case "pull_request":
-			return handlePullRequest(body, pullRequests, repositories)
+			return handlePullRequestEvent(body, pullRequests, repositories)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
 	}
@@ -76,7 +76,7 @@ func handleIssueComment(body []byte, git Git, pullRequests PullRequests, reposit
 	return SuccessResponse{"Not a command I understand. Ignoring."}
 }
 
-func handlePullRequest(body []byte, pullRequests PullRequests, repositories Repositories) Response {
+func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories Repositories) Response {
 	pullRequestEvent, err := parsePullRequestEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
