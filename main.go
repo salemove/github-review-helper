@@ -56,36 +56,42 @@ func main() {
 	git := NewGit(reposDir)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", Handler(func(w http.ResponseWriter, r *http.Request) Response {
+	mux.Handle("/", CreateHandler(conf, git, githubClient.PullRequests, githubClient.Repositories))
+
+	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+}
+
+func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories Repositories) Handler {
+	return func(w http.ResponseWriter, r *http.Request) Response {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			return ErrorResponse{err, http.StatusInternalServerError, "Failed to read the request's body"}
 		}
 		signature := r.Header.Get("X-Hub-Signature")
+		if signature == "" {
+			return ErrorResponse{nil, http.StatusUnauthorized, "Please provide a X-Hub-Signature"}
+		}
 		hasSecret, err := hasSecret(body, signature, conf.Secret)
 		if err != nil {
 			return ErrorResponse{err, http.StatusInternalServerError, "Failed to check the signature"}
-		}
-		if !hasSecret {
-			return ErrorResponse{nil, http.StatusBadRequest, "Bad X-Hub-Signature"}
+		} else if !hasSecret {
+			return ErrorResponse{nil, http.StatusForbidden, "Bad X-Hub-Signature"}
 		}
 		eventType := r.Header.Get("X-Github-Event")
 		switch eventType {
 		case "issue_comment":
-			return handleIssueComment(w, body, git, githubClient)
+			return handleIssueComment(w, body, git, pullRequests, repositories)
 		case "pull_request":
-			return handlePullRequest(w, body, git, githubClient)
+			return handlePullRequest(w, body, pullRequests, repositories)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
-	}))
-
-	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+	}
 }
 
 // startsWithPlusOne matches strings that start with either a +1 (not followed by other digits) or a :+1: emoji
-var startsWithPlusOne = regexp.MustCompile("^(:\\+1:|\\+1($|\\D))")
+var startsWithPlusOne = regexp.MustCompile(`^(:\+1:|\+1($|\D))`)
 
-func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClient *github.Client) Response {
+func handleIssueComment(w http.ResponseWriter, body []byte, git Git, pullRequests PullRequests, repositories Repositories) Response {
 	issueComment, err := parseIssueComment(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
@@ -95,15 +101,15 @@ func handleIssueComment(w http.ResponseWriter, body []byte, git Git, githubClien
 	}
 	switch {
 	case issueComment.Comment == "!squash":
-		return handleSquash(w, issueComment, git, githubClient)
+		return handleSquash(w, issueComment, git, pullRequests, repositories)
 	case startsWithPlusOne.MatchString(issueComment.Comment):
-		return handlePlusOne(w, issueComment, git, githubClient)
+		return handlePlusOne(w, issueComment, pullRequests, repositories)
 	}
 	return SuccessResponse{"Not a command I understand. Ignoring."}
 }
 
-func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, githubClient *github.Client) Response {
-	pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
+func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, pullRequests PullRequests, repositories Repositories) Response {
+	pr, _, err := pullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
 	if err != nil {
 		message := fmt.Sprintf("Getting PR %s failed", issueComment.PullRequestName())
 		return ErrorResponse{err, http.StatusBadGateway, message}
@@ -115,7 +121,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, git
 	}
 	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
-		_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+		_, _, err = repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 			State:       github.String("failure"),
 			Description: github.String("Failed to automatically squash the fixup! and squash! commits. Please squash manually"),
 			Context:     github.String(githubStatusSquashContext),
@@ -133,7 +139,7 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, git
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to get the squashed branch's HEAD's SHA"}
 	}
-	_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, headSHA, &github.RepoStatus{
+	_, _, err = repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, headSHA, &github.RepoStatus{
 		State:       github.String("success"),
 		Description: github.String("All fixup! and squash! commits successfully squashed"),
 		Context:     github.String(githubStatusSquashContext),
@@ -145,14 +151,14 @@ func handleSquash(w http.ResponseWriter, issueComment IssueComment, git Git, git
 	return SuccessResponse{}
 }
 
-func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, git Git, githubClient *github.Client) Response {
-	pr, _, err := githubClient.PullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
+func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
+	pr, _, err := pullRequests.Get(issueComment.Repository.Owner, issueComment.Repository.Name, issueComment.IssueNumber)
 	if err != nil {
 		message := fmt.Sprintf("Getting PR %s failed", issueComment.PullRequestName())
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	log.Printf("Marking PR %s as peer reviewed\n", issueComment.PullRequestName())
-	_, _, err = githubClient.Repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+	_, _, err = repositories.CreateStatus(issueComment.Repository.Owner, issueComment.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 		State:       github.String("success"),
 		Description: github.String("This PR has been peer reviewed"),
 		Context:     github.String(githubStatusPeerReviewContext),
@@ -164,7 +170,7 @@ func handlePlusOne(w http.ResponseWriter, issueComment IssueComment, git Git, gi
 	return SuccessResponse{}
 }
 
-func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient *github.Client) Response {
+func handlePullRequest(w http.ResponseWriter, body []byte, pullRequests PullRequests, repositories Repositories) Response {
 	pullRequestEvent, err := parsePullRequestEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
@@ -173,18 +179,18 @@ func handlePullRequest(w http.ResponseWriter, body []byte, git Git, githubClient
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
 	log.Printf("Checking for fixup commits for PR %s.\n", pullRequestEvent.PullRequestName())
-	commits, _, err := githubClient.PullRequests.ListCommits(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber, nil)
+	commits, _, err := pullRequests.ListCommits(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber, nil)
 	if err != nil {
 		message := fmt.Sprintf("Getting commits for PR %s failed", pullRequestEvent.PullRequestName())
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	if includesFixupCommits(commits) {
-		pr, _, err := githubClient.PullRequests.Get(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
+		pr, _, err := pullRequests.Get(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, pullRequestEvent.IssueNumber)
 		if err != nil {
 			message := fmt.Sprintf("Getting PR %s failed", pullRequestEvent.PullRequestName())
 			return ErrorResponse{err, http.StatusBadGateway, message}
 		}
-		_, _, err = githubClient.Repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
+		_, _, err = repositories.CreateStatus(pullRequestEvent.Repository.Owner, pullRequestEvent.Repository.Name, *pr.Head.SHA, &github.RepoStatus{
 			State:       github.String("pending"),
 			Description: github.String("This PR needs to be squashed with !squash before merging"),
 			Context:     github.String(githubStatusSquashContext),
