@@ -33,14 +33,6 @@ func handleSquashCommand(issueComment IssueComment, git Git, pullRequests PullRe
 	if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
 	}
-	squashedHeadSHA, err := repo.GetHeadSHA()
-	if err != nil {
-		return ErrorResponse{err, http.StatusInternalServerError, "Failed to get the squashed branch's HEAD's SHA"}
-	}
-	status := createSquashStatus("success", "All fixup! and squash! commits successfully squashed")
-	if errResp := setStatus(issueComment.Repository, squashedHeadSHA, status, repositories); errResp != nil {
-		return errResp
-	}
 	return SuccessResponse{}
 }
 
@@ -54,6 +46,10 @@ func checkForFixupCommits(pullRequestEvent PullRequestEvent, pullRequests PullRe
 		return errResp
 	}
 	if !includesFixupCommits(commits) {
+		status := createSquashStatus("success", "No fixup! or squash! commits to be squashed")
+		if errResp := setPRHeadStatus(pullRequestEvent, status, pullRequests, repositories); errResp != nil {
+			return errResp
+		}
 		return SuccessResponse{}
 	}
 	status := createSquashStatus("pending", "This PR needs to be squashed with !squash before merging")

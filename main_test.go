@@ -211,7 +211,7 @@ var _ = Describe("github-review-helper", func() {
 								repo.On("RebaseAutosquash", "1234", "1235").Return(errors.New("merge conflict"))
 							})
 
-							It("reports the status and succeeds", func() {
+							It("reports the failure", func() {
 								repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 								handle()
@@ -230,15 +230,10 @@ var _ = Describe("github-review-helper", func() {
 
 							It("pushes the squashed changes, reports status and succeeds", func() {
 								repo.On("ForcePushHeadTo", "feature").Return(nil)
-								repo.On("GetHeadSHA").Return("1236", nil)
-								repositories.On("CreateStatus", "salemove", "github-review-helper", "1236", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 								handle()
 
-								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-								status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
-								Expect(*status.State).To(Equal("success"))
-								Expect(*status.Context).To(Equal("review/squash"))
+								repo.AssertExpectations(GinkgoT())
 							})
 						})
 					})
@@ -385,11 +380,22 @@ var _ = Describe("github-review-helper", func() {
 									},
 								},
 							}, nil, nil)
+							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+								Head: &github.PullRequestBranch{
+									SHA: github.String("1235"),
+								},
+							}, nil, nil)
 						})
 
-						It("succeeds", func() {
+						It("reports success status to GitHub", func() {
+							repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+
 							handle()
+
 							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
+							Expect(*status.State).To(Equal("success"))
+							Expect(*status.Context).To(Equal("review/squash"))
 						})
 					})
 
@@ -415,7 +421,7 @@ var _ = Describe("github-review-helper", func() {
 							}, nil, nil)
 						})
 
-						It("reports pending squash status to GitHub and succeeds", func() {
+						It("reports pending squash status to GitHub", func() {
 							repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 							handle()
