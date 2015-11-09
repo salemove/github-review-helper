@@ -89,6 +89,9 @@ branch, if it's already protected). Now checking the **Require status checks to 
 the `review/squash` context from the displayed list. NB: The bot must have had a change to check at least one PR for the
 context to appear in the list.
 
+*See the [GitHub
+documentation](https://help.github.com/articles/enabling-required-status-checks/) for a visual guide.*
+
 ### All set! Now try it out
 To try it out you can make some changes to your code on a feature branch that you've opened a PR for. Then stage these
 changes with `git add`. Now create a *fixup* commit for you current HEAD with `git commit --fixup=@` and push the
