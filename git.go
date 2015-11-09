@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 type Git interface {
@@ -25,16 +26,27 @@ type Repo interface {
 }
 
 type git struct {
+	sync.Mutex
 	basePath string
+	repos    map[string]repo
 }
 
 // NewGit creates a new Git implementation which will hold all its repos in the specified base path
 func NewGit(basePath string) Git {
-	return git{basePath}
+	return git{
+		basePath: basePath,
+		repos:    make(map[string]repo),
+	}
 }
 
 func (g git) repo(path string) Repo {
-	return repo{path}
+	existingRepo, exists := g.repos[path]
+	if !exists {
+		newRepo := repo{path: path}
+		g.repos[path] = newRepo
+		return newRepo
+	}
+	return existingRepo
 }
 
 func (g git) clone(url, localPath string) (Repo, error) {
@@ -45,6 +57,9 @@ func (g git) clone(url, localPath string) (Repo, error) {
 }
 
 func (g git) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
+	g.Lock()
+	defer g.Unlock()
+
 	localPath := filepath.Join(g.basePath, repoOwner, repoName)
 	exists, err := exists(localPath)
 	if err != nil {
@@ -72,10 +87,14 @@ func exists(path string) (bool, error) {
 }
 
 type repo struct {
+	sync.Mutex
 	path string
 }
 
 func (r repo) RebaseAutosquash(upstreamRef, branchRef string) error {
+	r.Lock()
+	defer r.Unlock()
+
 	// This makes the --interactive rebase not actually interactive
 	if err := os.Setenv("GIT_SEQUENCE_EDITOR", "true"); err != nil {
 		return fmt.Errorf("failed to change the env variable: %v", err)
@@ -94,6 +113,9 @@ func (r repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 }
 
 func (r repo) Fetch() error {
+	r.Lock()
+	defer r.Unlock()
+
 	if err := exec.Command("git", "-C", r.path, "fetch").Run(); err != nil {
 		return fmt.Errorf("failed to fetch: %v", err)
 	}
@@ -101,6 +123,9 @@ func (r repo) Fetch() error {
 }
 
 func (r repo) ForcePushHeadTo(remoteRef string) error {
+	r.Lock()
+	defer r.Unlock()
+
 	if err := exec.Command("git", "-C", r.path, "push", "--force", "origin", "@:"+remoteRef).Run(); err != nil {
 		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
@@ -108,6 +133,9 @@ func (r repo) ForcePushHeadTo(remoteRef string) error {
 }
 
 func (r repo) GetHeadSHA() (string, error) {
+	r.Lock()
+	defer r.Unlock()
+
 	output, err := exec.Command("git", "-C", r.path, "rev-parse", "@").Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get the current HEAD's SHA: %v", err)
