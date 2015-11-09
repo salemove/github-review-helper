@@ -68,7 +68,7 @@ func handleIssueComment(body []byte, git Git, pullRequests PullRequests, reposit
 		return SuccessResponse{"Not a PR. Ignoring."}
 	}
 	switch {
-	case issueComment.Comment == "!squash":
+	case isSquashCommand(issueComment.Comment):
 		return handleSquashCommand(issueComment, git, pullRequests, repositories)
 	case startsWithPlusOne.MatchString(issueComment.Comment):
 		return handlePlusOneComment(issueComment, pullRequests, repositories)
