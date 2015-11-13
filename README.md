@@ -9,11 +9,13 @@
 It currently does 2 things:
 
 1. It observes all PRs and detects if any `fixup!` or `squash!` commits are included in the PR. If there are, it uses
-   the GitHub status API to mark these commits as pending.
+   the GitHub status API to mark the PR as **pending** with `review/squash` context. If there are no *fixup* or *squash*
+   commits, it marks the PR as **success**. This allows one to set the `review/squash` **success** status as required
+   in the repo's GitHub settings to make sure no PR that includes *fixup* or *squash* commits gets accidentally merged.
 2. It observes all PR comments (comments on the unified diff or the individual commits don't count) and if it sees a
    command of `!squash`, it tries to *autosquash* (equivalent of running `git rebase --interactive --autosquash`
-   manually and instantly closing and saving the interactive rebase editor) all the commits in the PR. It reports
-   success/failure through the GitHub status API.
+   manually and instantly closing and saving the interactive rebase editor) all the commits in the PR. Success/failure
+   will be reflected by the `review/squash` status.
 
 ## Quick start
 ### Create an access token for the bot
@@ -77,6 +79,18 @@ Click on **Add webhook** to finish the process.
 
 *See the [GitHub
 documentation](https://developer.github.com/webhooks/creating/) on creating webhooks for more info.*
+
+### [Optional] Make `review/squash` **success** required
+
+If you wish to have the merge button disabled for PRs with *fixup* and *squash* commits in them, then make this status
+required. This can be done by going to the repo's **Settings** on GitHub, then going to the **Branches** section and
+selecting the branch you wish to protect from the **Protected branches** dropdown (or clicking on **Edit** next to the
+branch, if it's already protected). Now checking the **Require status checks to pass before merging** checkbox and then
+the `review/squash` context from the displayed list. NB: The bot must have had a change to check at least one PR for the
+context to appear in the list.
+
+*See the [GitHub
+documentation](https://help.github.com/articles/enabling-required-status-checks/) for a visual guide.*
 
 ### All set! Now try it out
 To try it out you can make some changes to your code on a feature branch that you've opened a PR for. Then stage these
