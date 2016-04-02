@@ -185,17 +185,24 @@ var _ = Describe("github-review-helper", func() {
 					})
 
 					Context("with GitHub request succeeding", func() {
-						var repo *MockRepo
+						var (
+							repo *MockRepo
+
+							baseRef = "master"
+							baseSHA = "1234"
+							headRef = "feature"
+							headSHA = "1235"
+						)
 
 						BeforeEach(func() {
 							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 								Base: &github.PullRequestBranch{
-									SHA: github.String("1234"),
-									Ref: github.String("master"),
+									SHA: github.String(baseSHA),
+									Ref: github.String(baseRef),
 								},
 								Head: &github.PullRequestBranch{
-									SHA: github.String("1235"),
-									Ref: github.String("feature"),
+									SHA: github.String(headSHA),
+									Ref: github.String(headRef),
 									Repo: &github.Repository{
 										Owner: &github.User{
 											Login: github.String(repositoryOwner),
@@ -211,11 +218,11 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with autosquash failing", func() {
 							BeforeEach(func() {
-								repo.On("RebaseAutosquash", "1234", "1235").Return(errors.New("merge conflict"))
+								repo.On("RebaseAutosquash", baseSHA, headSHA).Return(errors.New("merge conflict"))
 							})
 
 							It("reports the failure", func() {
-								repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+								repositories.On("CreateStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 								handle()
 
@@ -228,11 +235,11 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with autosquash succeeding", func() {
 							BeforeEach(func() {
-								repo.On("RebaseAutosquash", "1234", "1235").Return(nil)
+								repo.On("RebaseAutosquash", baseSHA, headSHA).Return(nil)
 							})
 
 							It("pushes the squashed changes, reports status", func() {
-								repo.On("ForcePushHeadTo", "feature").Return(nil)
+								repo.On("ForcePushHeadTo", headRef).Return(nil)
 
 								handle()
 
@@ -276,6 +283,7 @@ var _ = Describe("github-review-helper", func() {
 				})
 
 				Describe("+1 comment", func() {
+					var commitRevision = "1235"
 					var itMarksCommitPeerReviewed = func() {
 						Context("with GitHub request failing", func() {
 							BeforeEach(func() {
@@ -292,14 +300,13 @@ var _ = Describe("github-review-helper", func() {
 							BeforeEach(func() {
 								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 									Head: &github.PullRequestBranch{
-										SHA: github.String("1235"),
-										Ref: github.String("feature"),
+										SHA: github.String(commitRevision),
 									},
 								}, nil, nil)
 							})
 
 							It("reports the status", func() {
-								repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+								repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 								handle()
 
@@ -367,6 +374,8 @@ var _ = Describe("github-review-helper", func() {
 				})
 
 				Context("with the PR being synchronized", func() {
+					var commitRevision = "1235"
+
 					BeforeEach(func() {
 						requestJSON = pullRequestsEvent("synchronize")
 						mockSignature()
@@ -401,13 +410,13 @@ var _ = Describe("github-review-helper", func() {
 							}, nil, nil)
 							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 								Head: &github.PullRequestBranch{
-									SHA: github.String("1235"),
+									SHA: github.String(commitRevision),
 								},
 							}, nil, nil)
 						})
 
 						It("reports success status to GitHub", func() {
-							repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 							handle()
 
@@ -435,13 +444,13 @@ var _ = Describe("github-review-helper", func() {
 							}, nil, nil)
 							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 								Head: &github.PullRequestBranch{
-									SHA: github.String("1235"),
+									SHA: github.String(commitRevision),
 								},
 							}, nil, nil)
 						})
 
 						It("reports pending squash status to GitHub", func() {
-							repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 							handle()
 
