@@ -107,6 +107,27 @@ var _ = Describe("github-review-helper", func() {
 			})
 		})
 
+		var issueCommentEvent = func(comment string) string {
+			return `{
+  "issue": {
+    "number": 7,
+    "pull_request": {
+      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
+    }
+  },
+  "comment": {
+    "body": "` + comment + `"
+  },
+  "repository": {
+    "name": "github-review-helper",
+    "owner": {
+      "login": "salemove"
+    },
+    "ssh_url": "git@github.com:salemove/github-review-helper.git"
+  }
+}`
+		}
+
 		Context("with a valid signature", func() {
 			var mockSignature func()
 
@@ -126,24 +147,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Context("with an arbitrary comment", func() {
 					BeforeEach(func() {
-						requestJSON = `{
-  "issue": {
-    "number": 7,
-    "pull_request": {
-      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-    }
-  },
-  "comment": {
-    "body": "just a simple comment"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						requestJSON = issueCommentEvent("just a simple comment")
 						mockSignature()
 					})
 
@@ -156,24 +160,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Describe("!squash comment", func() {
 					BeforeEach(func() {
-						requestJSON = `{
-  "issue": {
-    "number": 7,
-    "pull_request": {
-      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-    }
-  },
-  "comment": {
-    "body": "!squash"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						requestJSON = issueCommentEvent("!squash")
 						mockSignature()
 					})
 
@@ -241,24 +228,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Describe("!merge comment", func() {
 					BeforeEach(func() {
-						requestJSON = `{
-  "issue": {
-    "number": 7,
-    "pull_request": {
-      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-    }
-  },
-  "comment": {
-    "body": "!merge"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						requestJSON = issueCommentEvent("!merge")
 						mockSignature()
 					})
 
@@ -306,24 +276,7 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with +1 at the beginning of the comment", func() {
 						BeforeEach(func() {
-							requestJSON = `{
-	  "issue": {
-		"number": 7,
-		"pull_request": {
-		  "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-		}
-	  },
-	  "comment": {
-		"body": "+1, awesome job!"
-	  },
-	  "repository": {
-		"name": "github-review-helper",
-		"owner": {
-		  "login": "salemove"
-		},
-		"ssh_url": "git@github.com:salemove/github-review-helper.git"
-	  }
-	}`
+							requestJSON = issueCommentEvent("+1, awesome job!")
 							mockSignature()
 						})
 
@@ -332,24 +285,7 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with +1 at the end of the comment", func() {
 						BeforeEach(func() {
-							requestJSON = `{
-	  "issue": {
-		"number": 7,
-		"pull_request": {
-		  "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-		}
-	  },
-	  "comment": {
-		"body": "Looking good! +1"
-	  },
-	  "repository": {
-		"name": "github-review-helper",
-		"owner": {
-		  "login": "salemove"
-		},
-		"ssh_url": "git@github.com:salemove/github-review-helper.git"
-	  }
-	}`
+							requestJSON = issueCommentEvent("Looking good! +1")
 							mockSignature()
 						})
 
@@ -358,21 +294,12 @@ var _ = Describe("github-review-helper", func() {
 				})
 			})
 
-			Describe("pull_request event", func() {
-				BeforeEach(func() {
-					headers["X-Github-Event"] = []string{"pull_request"}
-				})
-
-				Context("with the PR being closed", func() {
-					BeforeEach(func() {
-						requestJSON = `{
-  "action": "closed",
+			var pullRequestsEvent = func(action string) string {
+				return `{
+  "action": "` + action + `",
   "number": 7,
   "pull_request": {
     "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-  },
-  "comment": {
-    "body": "just a simple comment"
   },
   "repository": {
     "name": "github-review-helper",
@@ -382,6 +309,16 @@ var _ = Describe("github-review-helper", func() {
     "ssh_url": "git@github.com:salemove/github-review-helper.git"
   }
 }`
+			}
+
+			Describe("pull_request event", func() {
+				BeforeEach(func() {
+					headers["X-Github-Event"] = []string{"pull_request"}
+				})
+
+				Context("with the PR being closed", func() {
+					BeforeEach(func() {
+						requestJSON = pullRequestsEvent("closed")
 						mockSignature()
 					})
 
@@ -394,23 +331,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Context("with the PR being synchronized", func() {
 					BeforeEach(func() {
-						requestJSON = `{
-  "action": "synchronize",
-  "number": 7,
-  "pull_request": {
-    "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-  },
-  "comment": {
-    "body": "just a simple comment"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						requestJSON = pullRequestsEvent("synchronize")
 						mockSignature()
 					})
 
