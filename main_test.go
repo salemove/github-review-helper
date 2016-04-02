@@ -218,7 +218,7 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with autosquash failing", func() {
 							BeforeEach(func() {
-								repo.On("RebaseAutosquash", baseSHA, headSHA).Return(errors.New("merge conflict"))
+								repo.On("RebaseAutosquash", baseRef, headSHA).Return(errors.New("merge conflict"))
 							})
 
 							It("reports the failure", func() {
@@ -235,7 +235,7 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with autosquash succeeding", func() {
 							BeforeEach(func() {
-								repo.On("RebaseAutosquash", baseSHA, headSHA).Return(nil)
+								repo.On("RebaseAutosquash", baseRef, headSHA).Return(nil)
 							})
 
 							It("pushes the squashed changes, reports status", func() {
