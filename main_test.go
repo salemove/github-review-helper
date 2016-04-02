@@ -38,12 +38,14 @@ var _ = Describe("github-review-helper", func() {
 			git          *MockGit
 			pullRequests *MockPullRequests
 			repositories *MockRepositories
+			issues       *MockIssues
 		)
 
 		BeforeEach(func() {
 			git = new(MockGit)
 			pullRequests = new(MockPullRequests)
 			repositories = new(MockRepositories)
+			issues = new(MockIssues)
 			headers = make(map[string][]string)
 			conf = Config{
 				Secret: "a-secret",
@@ -53,7 +55,7 @@ var _ = Describe("github-review-helper", func() {
 		})
 
 		JustBeforeEach(func() {
-			handler := CreateHandler(conf, git, pullRequests, repositories)
+			handler := CreateHandler(conf, git, pullRequests, repositories, issues)
 
 			data := []byte(requestJSON)
 			request, err := http.NewRequest("GET", "http://localhost/whatever", bytes.NewBuffer(data))
@@ -239,9 +241,30 @@ var _ = Describe("github-review-helper", func() {
 						mockSignature()
 					})
 
-					It("succeeds", func() {
-						handle()
-						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					Context("with github request to add the label failing", func() {
+						BeforeEach(func() {
+							issues.
+								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{"merging"}).
+								Return(nil, nil, errors.New("an error"))
+						})
+
+						It("fails with a gateway error", func() {
+							handle()
+							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+						})
+					})
+
+					Context("with github request to add the label succeeding", func() {
+						BeforeEach(func() {
+							issues.
+								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{"merging"}).
+								Return(nil, nil, nil)
+						})
+
+						It("succeeds", func() {
+							handle()
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						})
 					})
 				})
 
