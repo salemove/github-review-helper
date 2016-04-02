@@ -56,8 +56,8 @@ func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories
 	}
 }
 
-// startsWithPlusOne matches strings that start with either a +1 (not followed by other digits) or a :+1: emoji
-var startsWithPlusOne = regexp.MustCompile(`^(:\+1:|\+1($|\D))`)
+// isPlusOneComment matches strings that contain either a +1 (not followed by other digits) or a :+1: emoji
+var isPlusOneComment = regexp.MustCompile(`\+1($|\D)`)
 
 func handleIssueComment(body []byte, git Git, pullRequests PullRequests, repositories Repositories) Response {
 	issueComment, err := parseIssueComment(body)
@@ -70,7 +70,7 @@ func handleIssueComment(body []byte, git Git, pullRequests PullRequests, reposit
 	switch {
 	case isSquashCommand(issueComment.Comment):
 		return handleSquashCommand(issueComment, git, pullRequests, repositories)
-	case startsWithPlusOne.MatchString(issueComment.Comment):
+	case isPlusOneComment.MatchString(issueComment.Comment):
 		return handlePlusOneComment(issueComment, pullRequests, repositories)
 	}
 	return SuccessResponse{"Not a command I understand. Ignoring."}
