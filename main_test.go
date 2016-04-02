@@ -275,9 +275,127 @@ var _ = Describe("github-review-helper", func() {
 								Return(nil, nil, nil)
 						})
 
-						It("succeeds", func() {
-							handle()
-							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						Context("with fetching the PR failing", func() {
+							BeforeEach(func() {
+								pullRequests.
+									On("Get", repositoryOwner, repositoryName, issueNumber).
+									Return(nil, nil, errors.New("an error"))
+							})
+
+							It("fails with a gateway error", func() {
+								handle()
+								Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+							})
+						})
+
+						Context("with the PR being already merged", func() {
+							BeforeEach(func() {
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
+									Merged: github.Bool(true),
+								}, nil, nil)
+							})
+
+							It("succeeds", func() {
+								handle()
+								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							})
+						})
+
+						Context("with the PR not being mergeable", func() {
+							BeforeEach(func() {
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
+									Merged:    github.Bool(false),
+									Mergeable: github.Bool(false),
+								}, nil, nil)
+							})
+
+							It("succeeds", func() {
+								handle()
+								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							})
+						})
+
+						Context("with the PR being mergeable", func() {
+							BeforeEach(func() {
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
+									Merged:    github.Bool(false),
+									Mergeable: github.Bool(true),
+								}, nil, nil)
+							})
+
+							Context("with merge failing with an unknown error", func() {
+								BeforeEach(func() {
+									additionalCommitMessage := ""
+									pullRequests.
+										On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+										Return(nil, nil, errors.New("an error"))
+								})
+
+								It("fails with a gateway error", func() {
+									handle()
+									Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+								})
+							})
+
+							Context("with head branch having changed", func() {
+								BeforeEach(func() {
+									additionalCommitMessage := ""
+									resp := &http.Response{
+										StatusCode: http.StatusConflict,
+									}
+									pullRequests.
+										On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+										Return(nil, &github.Response{
+											Response: resp,
+										}, &github.ErrorResponse{
+											Response: resp,
+											Message:  "Head branch was modified. Review and try the merge again.",
+										})
+								})
+
+								It("fails with a gateway error", func() {
+									handle()
+									Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+								})
+							})
+
+							Context("with PR not being mergeable", func() {
+								BeforeEach(func() {
+									additionalCommitMessage := ""
+									resp := &http.Response{
+										StatusCode: http.StatusMethodNotAllowed,
+									}
+									pullRequests.
+										On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+										Return(nil, &github.Response{
+											Response: resp,
+										}, &github.ErrorResponse{
+											Response: resp,
+											Message:  "Pull Request is not mergeable",
+										})
+								})
+
+								It("fails with a gateway error", func() {
+									handle()
+									Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+								})
+							})
+
+							Context("with merge succeeding", func() {
+								BeforeEach(func() {
+									additionalCommitMessage := ""
+									pullRequests.
+										On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+										Return(&github.PullRequestMergeResult{
+											Merged: github.Bool(true),
+										}, nil, nil)
+								})
+
+								It("succeeds", func() {
+									handle()
+									Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+								})
+							})
 						})
 					})
 				})

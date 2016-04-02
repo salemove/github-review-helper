@@ -1,15 +1,20 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/google/go-github/github"
 )
 
+var NotMergeableError = errors.New("PullRequests is not mergeable.")
+var OutdatedMergeRefError = errors.New("Merge failed because head branch has been modified.")
+
 type PullRequests interface {
 	Get(owner, repo string, number int) (*github.PullRequest, *github.Response, error)
 	ListCommits(owner, repo string, number int, opt *github.ListOptions) ([]github.RepositoryCommit, *github.Response, error)
+	Merge(owner, repo string, number int, commitMessage string) (*github.PullRequestMergeResult, *github.Response, error)
 }
 
 type Repositories interface {
@@ -61,8 +66,24 @@ func getCommits(issueable Issueable, pullRequests PullRequests) ([]github.Reposi
 func addLabel(repository Repository, issueNumber int, label string, issues Issues) *ErrorResponse {
 	_, _, err := issues.AddLabelsToIssue(repository.Owner, repository.Name, issueNumber, []string{label})
 	if err != nil {
-		message := fmt.Sprintf("Failed to set the label %s for issue nr %d", label, issueNumber)
+		message := fmt.Sprintf("Failed to set the label %s for issue #%d", label, issueNumber)
 		return &ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	return nil
+}
+
+func merge(repository Repository, issueNumber int, pullRequests PullRequests) error {
+	additionalCommitMessage := ""
+	result, resp, err := pullRequests.Merge(repository.Owner, repository.Name, issueNumber, additionalCommitMessage)
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusMethodNotAllowed {
+			return NotMergeableError
+		} else if resp != nil && resp.StatusCode == http.StatusConflict {
+			return OutdatedMergeRefError
+		}
+		return err
+	} else if result.Merged == nil || !*result.Merged {
+		return errors.New("Request successful, but PR not merged.")
 	}
 	return nil
 }
