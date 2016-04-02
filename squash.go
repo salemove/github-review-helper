@@ -37,9 +37,6 @@ func handleSquashCommand(issueComment IssueComment, git Git, pullRequests PullRe
 }
 
 func checkForFixupCommits(pullRequestEvent PullRequestEvent, pullRequests PullRequests, repositories Repositories) Response {
-	if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
-		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
-	}
 	log.Printf("Checking for fixup commits for PR %s.\n", pullRequestEvent.Issue().FullName())
 	commits, errResp := getCommits(pullRequestEvent, pullRequests)
 	if errResp != nil {

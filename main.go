@@ -80,6 +80,8 @@ func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories
 	pullRequestEvent, err := parsePullRequestEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
+	} else if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
+		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
 	return checkForFixupCommits(pullRequestEvent, pullRequests, repositories)
 }
