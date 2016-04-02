@@ -154,7 +154,7 @@ var _ = Describe("github-review-helper", func() {
 					})
 				})
 
-				Context("with a !squash comment", func() {
+				Describe("!squash comment", func() {
 					BeforeEach(func() {
 						requestJSON = `{
   "issue": {
@@ -239,7 +239,36 @@ var _ = Describe("github-review-helper", func() {
 					})
 				})
 
-				Context("with a +1 comment", func() {
+				Describe("!merge comment", func() {
+					BeforeEach(func() {
+						requestJSON = `{
+  "issue": {
+    "number": 7,
+    "pull_request": {
+      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
+    }
+  },
+  "comment": {
+    "body": "!merge"
+  },
+  "repository": {
+    "name": "github-review-helper",
+    "owner": {
+      "login": "salemove"
+    },
+    "ssh_url": "git@github.com:salemove/github-review-helper.git"
+  }
+}`
+						mockSignature()
+					})
+
+					It("succeeds", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					})
+				})
+
+				Describe("+1 comment", func() {
 					var itMarksCommitPeerReviewed = func() {
 						Context("with GitHub request failing", func() {
 							BeforeEach(func() {
