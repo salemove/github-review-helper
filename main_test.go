@@ -196,6 +196,13 @@ var _ = Describe("github-review-helper", func() {
 								Head: &github.PullRequestBranch{
 									SHA: github.String("1235"),
 									Ref: github.String("feature"),
+									Repo: &github.Repository{
+										Owner: &github.User{
+											Login: github.String(repositoryOwner),
+										},
+										Name:   github.String(repositoryName),
+										SSHURL: github.String(sshURL),
+									},
 								},
 							}, nil, nil)
 							repo = new(MockRepo)

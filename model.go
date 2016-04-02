@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/google/go-github/github"
+)
 
 type (
 	Issue struct {
@@ -48,4 +51,12 @@ func (p PullRequestEvent) Issue() Issue {
 
 func (i Issue) FullName() string {
 	return fmt.Sprintf("%s/%s#%d", i.Repository.Owner, i.Repository.Name, i.Number)
+}
+
+func internalRepositoryRepresentation(githubRepository *github.Repository) Repository {
+	return Repository{
+		Owner: *githubRepository.Owner.Login,
+		Name:  *githubRepository.Name,
+		URL:   *githubRepository.SSHURL,
+	}
 }
