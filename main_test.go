@@ -18,6 +18,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const (
+	repositoryOwner = "salemove"
+	repositoryName  = "github-review-helper"
+	sshURL          = "git@github.com:salemove/github-review-helper.git"
+	issueNumber     = 7
+)
+
 var _ = Describe("github-review-helper", func() {
 	Describe("/ handler", func() {
 		var (
@@ -110,20 +117,20 @@ var _ = Describe("github-review-helper", func() {
 		var issueCommentEvent = func(comment string) string {
 			return `{
   "issue": {
-    "number": 7,
+    "number": ` + strconv.Itoa(issueNumber) + `,
     "pull_request": {
-      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
+      "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
     }
   },
   "comment": {
     "body": "` + comment + `"
   },
   "repository": {
-    "name": "github-review-helper",
+    "name": "` + repositoryName + `",
     "owner": {
-      "login": "salemove"
+      "login": "` + repositoryOwner + `"
     },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
+    "ssh_url": "` + sshURL + `"
   }
 }`
 		}
@@ -166,7 +173,7 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with GitHub request failing", func() {
 						BeforeEach(func() {
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(nil, nil, errors.New("an error"))
+							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(nil, nil, errors.New("an error"))
 						})
 
 						It("fails with a gateway error", func() {
@@ -179,7 +186,7 @@ var _ = Describe("github-review-helper", func() {
 						var repo *MockRepo
 
 						BeforeEach(func() {
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 								Base: &github.PullRequestBranch{
 									SHA: github.String("1234"),
 									Ref: github.String("master"),
@@ -190,7 +197,7 @@ var _ = Describe("github-review-helper", func() {
 								},
 							}, nil, nil)
 							repo = new(MockRepo)
-							git.On("GetUpdatedRepo", "git@github.com:salemove/github-review-helper.git", "salemove", "github-review-helper").Return(repo, nil)
+							git.On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).Return(repo, nil)
 						})
 
 						Context("with autosquash failing", func() {
@@ -199,7 +206,7 @@ var _ = Describe("github-review-helper", func() {
 							})
 
 							It("reports the failure", func() {
-								repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+								repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 								handle()
 
@@ -242,7 +249,7 @@ var _ = Describe("github-review-helper", func() {
 					var itMarksCommitPeerReviewed = func() {
 						Context("with GitHub request failing", func() {
 							BeforeEach(func() {
-								pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(nil, nil, errors.New("an error"))
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(nil, nil, errors.New("an error"))
 							})
 
 							It("fails with a gateway error", func() {
@@ -253,7 +260,7 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with GitHub request succeeding", func() {
 							BeforeEach(func() {
-								pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 									Head: &github.PullRequestBranch{
 										SHA: github.String("1235"),
 										Ref: github.String("feature"),
@@ -262,7 +269,7 @@ var _ = Describe("github-review-helper", func() {
 							})
 
 							It("reports the status", func() {
-								repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+								repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 								handle()
 
@@ -297,16 +304,16 @@ var _ = Describe("github-review-helper", func() {
 			var pullRequestsEvent = func(action string) string {
 				return `{
   "action": "` + action + `",
-  "number": 7,
+  "number": ` + strconv.Itoa(issueNumber) + `,
   "pull_request": {
-    "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
+    "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
   },
   "repository": {
-    "name": "github-review-helper",
+    "name": "` + repositoryName + `",
     "owner": {
-      "login": "salemove"
+      "login": "` + repositoryOwner + `"
     },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
+    "ssh_url": "` + sshURL + `"
   }
 }`
 			}
@@ -338,7 +345,7 @@ var _ = Describe("github-review-helper", func() {
 					Context("with GitHub request to list commits failing", func() {
 						BeforeEach(func() {
 							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return(nil, nil, errors.New("an error"))
+							pullRequests.On("ListCommits", repositoryOwner, repositoryName, issueNumber, listOptions).Return(nil, nil, errors.New("an error"))
 						})
 
 						It("fails with a gateway error", func() {
@@ -350,7 +357,7 @@ var _ = Describe("github-review-helper", func() {
 					Context("with list of commits from GitHub NOT including fixup commits", func() {
 						BeforeEach(func() {
 							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return([]github.RepositoryCommit{
+							pullRequests.On("ListCommits", repositoryOwner, repositoryName, issueNumber, listOptions).Return([]github.RepositoryCommit{
 								github.RepositoryCommit{
 									Commit: &github.Commit{
 										Message: github.String("Changing things"),
@@ -362,7 +369,7 @@ var _ = Describe("github-review-helper", func() {
 									},
 								},
 							}, nil, nil)
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 								Head: &github.PullRequestBranch{
 									SHA: github.String("1235"),
 								},
@@ -370,7 +377,7 @@ var _ = Describe("github-review-helper", func() {
 						})
 
 						It("reports success status to GitHub", func() {
-							repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 							handle()
 
@@ -384,7 +391,7 @@ var _ = Describe("github-review-helper", func() {
 					Context("with list of commits from GitHub including fixup commits", func() {
 						BeforeEach(func() {
 							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return([]github.RepositoryCommit{
+							pullRequests.On("ListCommits", repositoryOwner, repositoryName, issueNumber, listOptions).Return([]github.RepositoryCommit{
 								github.RepositoryCommit{
 									Commit: &github.Commit{
 										Message: github.String("Changing things"),
@@ -396,7 +403,7 @@ var _ = Describe("github-review-helper", func() {
 									},
 								},
 							}, nil, nil)
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 								Head: &github.PullRequestBranch{
 									SHA: github.String("1235"),
 								},
@@ -404,7 +411,7 @@ var _ = Describe("github-review-helper", func() {
 						})
 
 						It("reports pending squash status to GitHub", func() {
-							repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.On("CreateStatus", repositoryOwner, repositoryName, "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 							handle()
 
