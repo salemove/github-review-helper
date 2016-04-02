@@ -8,8 +8,8 @@ import (
 )
 
 type PullRequests interface {
-	Get(owner string, repo string, number int) (*github.PullRequest, *github.Response, error)
-	ListCommits(owner string, repo string, number int, opt *github.ListOptions) ([]github.RepositoryCommit, *github.Response, error)
+	Get(owner, repo string, number int) (*github.PullRequest, *github.Response, error)
+	ListCommits(owner, repo string, number int, opt *github.ListOptions) ([]github.RepositoryCommit, *github.Response, error)
 }
 
 type Repositories interface {
