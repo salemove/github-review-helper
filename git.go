@@ -28,35 +28,35 @@ type Repo interface {
 type git struct {
 	sync.Mutex
 	basePath string
-	repos    map[string]repo
+	repos    map[string]*repo
 }
 
 // NewGit creates a new Git implementation which will hold all its repos in the specified base path
 func NewGit(basePath string) Git {
-	return git{
+	return &git{
 		basePath: basePath,
-		repos:    make(map[string]repo),
+		repos:    make(map[string]*repo),
 	}
 }
 
-func (g git) repo(path string) Repo {
+func (g *git) repo(path string) Repo {
 	existingRepo, exists := g.repos[path]
 	if !exists {
-		newRepo := repo{path: path}
+		newRepo := &repo{path: path}
 		g.repos[path] = newRepo
 		return newRepo
 	}
 	return existingRepo
 }
 
-func (g git) clone(url, localPath string) (Repo, error) {
+func (g *git) clone(url, localPath string) (Repo, error) {
 	if err := exec.Command("git", "clone", url, localPath).Run(); err != nil {
-		return repo{}, fmt.Errorf("failed to clone: %v", err)
+		return nil, fmt.Errorf("failed to clone: %v", err)
 	}
 	return g.repo(localPath), nil
 }
 
-func (g git) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
+func (g *git) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
 	g.Lock()
 	defer g.Unlock()
 
@@ -91,7 +91,7 @@ type repo struct {
 	path string
 }
 
-func (r repo) RebaseAutosquash(upstreamRef, branchRef string) error {
+func (r *repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 	r.Lock()
 	defer r.Unlock()
 
@@ -112,7 +112,7 @@ func (r repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 	return nil
 }
 
-func (r repo) Fetch() error {
+func (r *repo) Fetch() error {
 	r.Lock()
 	defer r.Unlock()
 
@@ -122,7 +122,7 @@ func (r repo) Fetch() error {
 	return nil
 }
 
-func (r repo) ForcePushHeadTo(remoteRef string) error {
+func (r *repo) ForcePushHeadTo(remoteRef string) error {
 	r.Lock()
 	defer r.Unlock()
 
@@ -132,7 +132,7 @@ func (r repo) ForcePushHeadTo(remoteRef string) error {
 	return nil
 }
 
-func (r repo) GetHeadSHA() (string, error) {
+func (r *repo) GetHeadSHA() (string, error) {
 	r.Lock()
 	defer r.Unlock()
 
