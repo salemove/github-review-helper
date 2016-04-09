@@ -32,20 +32,26 @@ func setPRHeadStatus(issueable Issueable, status *github.RepoStatus, pullRequest
 	if errResp != nil {
 		return errResp
 	}
-	repository := issueable.Issue().Repository
-	return setStatus(repository, *pr.Head.SHA, status, repositories)
+	return setStatus(pr, status, repositories)
 }
 
-func setStatus(repository Repository, commitRef string, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
-	_, _, err := repositories.CreateStatus(repository.Owner, repository.Name, commitRef, status)
+func setStatus(pr *github.PullRequest, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
+	// I'm assuming (because the documentation on this is unclear) that the
+	// status has to be reported for the Head repository. It might seem
+	// weird, because why should a bot configured for the Base repository
+	// have access to the Head repository, but AFAIK all forks must be
+	// public and reporting statuses on public repos is always allowed.
+	headRepository := internalRepositoryRepresentation(pr.Head.Repo)
+	_, _, err := repositories.CreateStatus(headRepository.Owner, headRepository.Name, *pr.Head.SHA, status)
 	if err != nil {
-		message := fmt.Sprintf("Failed to create a %s status for commit %s", *status.State, commitRef)
+		message := fmt.Sprintf("Failed to create a %s status for commit %s", *status.State, *pr.Head.SHA)
 		return &ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	return nil
 }
 
-func getStatuses(repository Repository, ref string, repositories Repositories) (string, []github.RepoStatus, *ErrorResponse) {
+func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []github.RepoStatus, *ErrorResponse) {
+	headRepository := internalRepositoryRepresentation(pr.Head.Repo)
 	pageNr := 1
 	statuses := []github.RepoStatus{}
 	var state string
@@ -56,9 +62,9 @@ func getStatuses(repository Repository, ref string, repositories Repositories) (
 			// https://developer.github.com/v3/repos/statuses/#get-the-combined-status-for-a-specific-ref
 			PerPage: 100,
 		}
-		combinedStatus, resp, err := repositories.GetCombinedStatus(repository.Owner, repository.Name, ref, listOptions)
+		combinedStatus, resp, err := repositories.GetCombinedStatus(headRepository.Owner, headRepository.Name, *pr.Head.SHA, listOptions)
 		if err != nil {
-			message := fmt.Sprintf("Failed to get combined status for ref %s", ref)
+			message := fmt.Sprintf("Failed to get combined status for ref %s", *pr.Head.SHA)
 			return "", nil, &ErrorResponse{err, http.StatusBadGateway, message}
 		}
 		// Although the combined state should be the same for all pages, use

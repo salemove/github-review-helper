@@ -66,13 +66,7 @@ func squashAndReportFailure(pr *github.PullRequest, git Git, repositories Reposi
 	if err == RebaseError {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
 		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
-		// I'm assuming (because the documentation on this is unclear) that the
-		// status has to be reported for the Head repository. It might seem
-		// weird, because why should a bot configured for the Base repository
-		// have access to the Head repository, but AFAIK all forks must be
-		// public and reporting statuses on public repos is always allowed.
-		headRepository := internalRepositoryRepresentation(pr.Head.Repo)
-		if errResp := setStatus(headRepository, *pr.Head.SHA, status, repositories); errResp != nil {
+		if errResp := setStatus(pr, status, repositories); errResp != nil {
 			return errResp
 		}
 		return SuccessResponse{}

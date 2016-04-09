@@ -25,6 +25,16 @@ const (
 	issueNumber     = 7
 )
 
+var (
+	repository = &github.Repository{
+		Owner: &github.User{
+			Login: github.String(repositoryOwner),
+		},
+		Name:   github.String(repositoryName),
+		SSHURL: github.String(sshURL),
+	}
+)
+
 var _ = Describe("github-review-helper", func() {
 	Describe("/ handler", func() {
 		var (
@@ -243,19 +253,14 @@ var _ = Describe("github-review-helper", func() {
 					Context("with GitHub request succeeding", func() {
 						pr := &github.PullRequest{
 							Base: &github.PullRequestBranch{
-								SHA: github.String("1234"),
-								Ref: github.String("master"),
+								SHA:  github.String("1234"),
+								Ref:  github.String("master"),
+								Repo: repository,
 							},
 							Head: &github.PullRequestBranch{
-								SHA: github.String("1235"),
-								Ref: github.String("feature"),
-								Repo: &github.Repository{
-									Owner: &github.User{
-										Login: github.String(repositoryOwner),
-									},
-									Name:   github.String(repositoryName),
-									SSHURL: github.String(sshURL),
-								},
+								SHA:  github.String("1235"),
+								Ref:  github.String("feature"),
+								Repo: repository,
 							},
 						}
 
@@ -340,31 +345,19 @@ var _ = Describe("github-review-helper", func() {
 						})
 
 						Context("with the PR being mergeable", func() {
-							headRef := "feature"
+							headSHA := "1235"
 							pr := &github.PullRequest{
 								Merged:    github.Bool(false),
 								Mergeable: github.Bool(true),
 								Base: &github.PullRequestBranch{
-									SHA: github.String("1234"),
-									Ref: github.String("master"),
-									Repo: &github.Repository{
-										Owner: &github.User{
-											Login: github.String(repositoryOwner),
-										},
-										Name:   github.String(repositoryName),
-										SSHURL: github.String(sshURL),
-									},
+									SHA:  github.String("1234"),
+									Ref:  github.String("master"),
+									Repo: repository,
 								},
 								Head: &github.PullRequestBranch{
-									SHA: github.String("1235"),
-									Ref: github.String(headRef),
-									Repo: &github.Repository{
-										Owner: &github.User{
-											Login: github.String(repositoryOwner),
-										},
-										Name:   github.String(repositoryName),
-										SSHURL: github.String(sshURL),
-									},
+									SHA:  github.String(headSHA),
+									Ref:  github.String("feature"),
+									Repo: repository,
 								},
 							}
 
@@ -375,7 +368,7 @@ var _ = Describe("github-review-helper", func() {
 							Context("with combined state being failing", func() {
 								BeforeEach(func() {
 									repositories.
-										On("GetCombinedStatus", repositoryOwner, repositoryName, headRef, mock.AnythingOfType("*github.ListOptions")).
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
 										Return(&github.CombinedStatus{
 											State: github.String("failing"),
 										}, &github.Response{}, nil)
@@ -390,7 +383,7 @@ var _ = Describe("github-review-helper", func() {
 							Context("with a pending squash status in paged combined status request", func() {
 								BeforeEach(func() {
 									repositories.
-										On("GetCombinedStatus", repositoryOwner, repositoryName, headRef, &github.ListOptions{
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
 											Page:    1,
 											PerPage: 100,
 										}).
@@ -406,7 +399,7 @@ var _ = Describe("github-review-helper", func() {
 											NextPage: 2,
 										}, nil)
 									repositories.
-										On("GetCombinedStatus", repositoryOwner, repositoryName, headRef, &github.ListOptions{
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
 											Page:    2,
 											PerPage: 100,
 										}).
@@ -427,7 +420,7 @@ var _ = Describe("github-review-helper", func() {
 							Context("with combined state being success", func() {
 								BeforeEach(func() {
 									repositories.
-										On("GetCombinedStatus", repositoryOwner, repositoryName, headRef, mock.AnythingOfType("*github.ListOptions")).
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
 										Return(&github.CombinedStatus{
 											State: github.String("success"),
 										}, &github.Response{}, nil)
@@ -569,7 +562,8 @@ var _ = Describe("github-review-helper", func() {
 							BeforeEach(func() {
 								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 									Head: &github.PullRequestBranch{
-										SHA: github.String(commitRevision),
+										SHA:  github.String(commitRevision),
+										Repo: repository,
 									},
 								}, nil, nil)
 							})
@@ -683,7 +677,8 @@ var _ = Describe("github-review-helper", func() {
 								On("Get", repositoryOwner, repositoryName, issueNumber).
 								Return(&github.PullRequest{
 									Head: &github.PullRequestBranch{
-										SHA: github.String(commitRevision),
+										SHA:  github.String(commitRevision),
+										Repo: repository,
 									},
 								}, nil, nil)
 						})
@@ -732,7 +727,8 @@ var _ = Describe("github-review-helper", func() {
 								On("Get", repositoryOwner, repositoryName, issueNumber).
 								Return(&github.PullRequest{
 									Head: &github.PullRequestBranch{
-										SHA: github.String(commitRevision),
+										SHA:  github.String(commitRevision),
+										Repo: repository,
 									},
 								}, nil, nil)
 						})

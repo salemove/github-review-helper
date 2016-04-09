@@ -39,7 +39,7 @@ func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, p
 	} else if !*pr.Mergeable {
 		return SuccessResponse{}
 	}
-	state, statuses, errResp := getStatuses(issueComment.Repository, *pr.Head.Ref, repositories)
+	state, statuses, errResp := getStatuses(pr, repositories)
 	if errResp != nil {
 		return errResp
 	} else if state == "pending" && containsPendingSquashStatus(statuses) {
