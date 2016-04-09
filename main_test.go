@@ -328,7 +328,8 @@ var _ = Describe("github-review-helper", func() {
 									additionalCommitMessage := ""
 									pullRequests.
 										On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
-										Return(nil, nil, errors.New("an error"))
+										Return(nil, nil, errors.New("an error")).
+										Once()
 								})
 
 								It("fails with a gateway error", func() {
@@ -338,12 +339,12 @@ var _ = Describe("github-review-helper", func() {
 							})
 
 							Context("with head branch having changed", func() {
-								BeforeEach(func() {
+								mockMergeFailWithConflict := func() *mock.Call {
 									additionalCommitMessage := ""
 									resp := &http.Response{
 										StatusCode: http.StatusConflict,
 									}
-									pullRequests.
+									return pullRequests.
 										On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
 										Return(nil, &github.Response{
 											Response: resp,
@@ -351,11 +352,40 @@ var _ = Describe("github-review-helper", func() {
 											Response: resp,
 											Message:  "Head branch was modified. Review and try the merge again.",
 										})
+								}
+
+								Context("every time", func() {
+									BeforeEach(func() {
+										mockMergeFailWithConflict()
+									})
+
+									It("retries 3 times and fails with a gateway error", func() {
+										handle()
+										pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", 4)
+										pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", 4)
+										Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+									})
 								})
 
-								It("fails with a gateway error", func() {
-									handle()
-									Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+								Context("with merge succeeding with first retry", func() {
+									BeforeEach(func() {
+										mockMergeFailWithConflict().Once()
+
+										additionalCommitMessage := ""
+										pullRequests.
+											On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+											Return(&github.PullRequestMergeResult{
+												Merged: github.Bool(true),
+											}, nil, nil).
+											Once()
+									})
+
+									It("succeeds", func() {
+										handle()
+										pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", 2)
+										pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", 2)
+										Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+									})
 								})
 							})
 
@@ -372,7 +402,8 @@ var _ = Describe("github-review-helper", func() {
 										}, &github.ErrorResponse{
 											Response: resp,
 											Message:  "Pull Request is not mergeable",
-										})
+										}).
+										Once()
 								})
 
 								It("fails with a gateway error", func() {
@@ -388,7 +419,8 @@ var _ = Describe("github-review-helper", func() {
 										On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
 										Return(&github.PullRequestMergeResult{
 											Merged: github.Bool(true),
-										}, nil, nil)
+										}, nil, nil).
+										Once()
 								})
 
 								It("succeeds", func() {

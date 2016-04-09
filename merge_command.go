@@ -17,6 +17,10 @@ func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests P
 	if errResp != nil {
 		return errResp
 	}
+	return mergeWithRetry(3, issueComment, pullRequests)
+}
+
+func mergeWithRetry(nrOfRetries int, issueComment IssueComment, pullRequests PullRequests) Response {
 	pr, errResp := getPR(issueComment, pullRequests)
 	if errResp != nil {
 		return errResp
@@ -26,7 +30,9 @@ func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests P
 		return SuccessResponse{}
 	}
 	err := merge(issueComment.Repository, issueComment.IssueNumber, pullRequests)
-	if err != nil {
+	if err == OutdatedMergeRefError && nrOfRetries > 0 {
+		return mergeWithRetry(nrOfRetries-1, issueComment, pullRequests)
+	} else if err != nil {
 		message := fmt.Sprintf("Failed to merge PR #%d", issueComment.IssueNumber)
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
