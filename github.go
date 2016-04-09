@@ -19,6 +19,7 @@ type PullRequests interface {
 
 type Repositories interface {
 	CreateStatus(owner, repo, ref string, status *github.RepoStatus) (*github.RepoStatus, *github.Response, error)
+	GetCombinedStatus(owner, repo, ref string, opt *github.ListOptions) (*github.CombinedStatus, *github.Response, error)
 }
 
 type Issues interface {
@@ -42,6 +43,35 @@ func setStatus(repository Repository, commitRef string, status *github.RepoStatu
 		return &ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	return nil
+}
+
+func getStatuses(repository Repository, ref string, repositories Repositories) (string, []github.RepoStatus, *ErrorResponse) {
+	pageNr := 1
+	statuses := []github.RepoStatus{}
+	var state string
+	for {
+		listOptions := &github.ListOptions{
+			Page: pageNr,
+			// The maximum for this endpoint is higher than the default 30:
+			// https://developer.github.com/v3/repos/statuses/#get-the-combined-status-for-a-specific-ref
+			PerPage: 100,
+		}
+		combinedStatus, resp, err := repositories.GetCombinedStatus(repository.Owner, repository.Name, ref, listOptions)
+		if err != nil {
+			message := fmt.Sprintf("Failed to get combined status for ref %s", ref)
+			return "", nil, &ErrorResponse{err, http.StatusBadGateway, message}
+		}
+		// Although the combined state should be the same for all pages, use
+		// the combined state from the latest request, because that's always
+		// the most up to date one
+		state = *combinedStatus.State
+		statuses = append(statuses, combinedStatus.Statuses...)
+		if resp.NextPage == 0 {
+			break
+		}
+		pageNr = resp.NextPage
+	}
+	return state, statuses, nil
 }
 
 func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest, *ErrorResponse) {
