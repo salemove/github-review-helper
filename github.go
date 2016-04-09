@@ -56,10 +56,23 @@ func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest,
 
 func getCommits(issueable Issueable, pullRequests PullRequests) ([]github.RepositoryCommit, *ErrorResponse) {
 	issue := issueable.Issue()
-	commits, _, err := pullRequests.ListCommits(issue.Repository.Owner, issue.Repository.Name, issue.Number, nil)
-	if err != nil {
-		message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
-		return nil, &ErrorResponse{err, http.StatusBadGateway, message}
+	pageNr := 1
+	commits := []github.RepositoryCommit{}
+	for {
+		listOptions := &github.ListOptions{
+			Page:    pageNr,
+			PerPage: 30,
+		}
+		pageCommits, resp, err := pullRequests.ListCommits(issue.Repository.Owner, issue.Repository.Name, issue.Number, listOptions)
+		if err != nil {
+			message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
+			return nil, &ErrorResponse{err, http.StatusBadGateway, message}
+		}
+		commits = append(commits, pageCommits...)
+		if resp.NextPage == 0 {
+			break
+		}
+		pageNr = resp.NextPage
 	}
 	return commits, nil
 }

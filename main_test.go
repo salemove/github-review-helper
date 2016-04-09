@@ -554,8 +554,9 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with GitHub request to list commits failing", func() {
 						BeforeEach(func() {
-							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", repositoryOwner, repositoryName, issueNumber, listOptions).Return(nil, nil, errors.New("an error"))
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+								Return(nil, nil, errors.New("an error"))
 						})
 
 						It("fails with a gateway error", func() {
@@ -566,24 +567,27 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with list of commits from GitHub NOT including fixup commits", func() {
 						BeforeEach(func() {
-							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", repositoryOwner, repositoryName, issueNumber, listOptions).Return([]github.RepositoryCommit{
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("Changing things"),
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+								Return([]github.RepositoryCommit{
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("Changing things"),
+										},
 									},
-								},
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("Another casual commit"),
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("Another casual commit"),
+										},
 									},
-								},
-							}, nil, nil)
-							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
-								Head: &github.PullRequestBranch{
-									SHA: github.String(commitRevision),
-								},
-							}, nil, nil)
+								}, &github.Response{}, nil)
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(&github.PullRequest{
+									Head: &github.PullRequestBranch{
+										SHA: github.String(commitRevision),
+									},
+								}, nil, nil)
 						})
 
 						It("reports success status to GitHub", func() {
@@ -598,26 +602,41 @@ var _ = Describe("github-review-helper", func() {
 						})
 					})
 
-					Context("with list of commits from GitHub including fixup commits", func() {
+					Context("with paged list of commits from GitHub including fixup commits", func() {
 						BeforeEach(func() {
-							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", repositoryOwner, repositoryName, issueNumber, listOptions).Return([]github.RepositoryCommit{
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("Changing things"),
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+									Page:    1,
+									PerPage: 30,
+								}).
+								Return([]github.RepositoryCommit{
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("Changing things"),
+										},
 									},
-								},
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
+								}, &github.Response{
+									NextPage: 2,
+								}, nil)
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+									Page:    2,
+									PerPage: 30,
+								}).
+								Return([]github.RepositoryCommit{
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
+										},
 									},
-								},
-							}, nil, nil)
-							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
-								Head: &github.PullRequestBranch{
-									SHA: github.String(commitRevision),
-								},
-							}, nil, nil)
+								}, &github.Response{}, nil)
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(&github.PullRequest{
+									Head: &github.PullRequestBranch{
+										SHA: github.String(commitRevision),
+									},
+								}, nil, nil)
 						})
 
 						It("reports pending squash status to GitHub", func() {
