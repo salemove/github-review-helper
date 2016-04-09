@@ -38,3 +38,24 @@ func (_m *MockIssues) AddLabelsToIssue(owner string, repo string, number int, la
 
 	return r0, r1, r2
 }
+func (_m *MockIssues) RemoveLabelForIssue(owner string, repo string, number int, label string) (*github.Response, error) {
+	ret := _m.Called(owner, repo, number, label)
+
+	var r0 *github.Response
+	if rf, ok := ret.Get(0).(func(string, string, int, string) *github.Response); ok {
+		r0 = rf(owner, repo, number, label)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*github.Response)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string, string, int, string) error); ok {
+		r1 = rf(owner, repo, number, label)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}

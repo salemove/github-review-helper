@@ -258,7 +258,7 @@ var _ = Describe("github-review-helper", func() {
 					Context("with github request to add the label failing", func() {
 						BeforeEach(func() {
 							issues.
-								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{"merging"}).
+								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{MergingLabel}).
 								Return(nil, nil, errors.New("an error"))
 						})
 
@@ -271,7 +271,7 @@ var _ = Describe("github-review-helper", func() {
 					Context("with github request to add the label succeeding", func() {
 						BeforeEach(func() {
 							issues.
-								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{"merging"}).
+								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{MergingLabel}).
 								Return(nil, nil, nil)
 						})
 
@@ -293,10 +293,14 @@ var _ = Describe("github-review-helper", func() {
 								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 									Merged: github.Bool(true),
 								}, nil, nil)
+								issues.
+									On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+									Return(nil, nil, nil)
 							})
 
-							It("succeeds", func() {
+							It("removes the 'merging' label from the PR", func() {
 								handle()
+								issues.AssertExpectations(GinkgoT())
 								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 							})
 						})
@@ -378,12 +382,16 @@ var _ = Describe("github-review-helper", func() {
 												Merged: github.Bool(true),
 											}, nil, nil).
 											Once()
+										issues.
+											On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+											Return(nil, nil, nil)
 									})
 
-									It("succeeds", func() {
+									It("removes the 'merging' label from the PR after the merge", func() {
 										handle()
 										pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", 2)
 										pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", 2)
+										issues.AssertExpectations(GinkgoT())
 										Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 									})
 								})
@@ -421,10 +429,14 @@ var _ = Describe("github-review-helper", func() {
 											Merged: github.Bool(true),
 										}, nil, nil).
 										Once()
+									issues.
+										On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+										Return(nil, nil, nil)
 								})
 
-								It("succeeds", func() {
+								It("removes the 'merging' label from the PR after the merge", func() {
 									handle()
+									issues.AssertExpectations(GinkgoT())
 									Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 								})
 							})

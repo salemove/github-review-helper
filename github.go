@@ -23,6 +23,7 @@ type Repositories interface {
 
 type Issues interface {
 	AddLabelsToIssue(owner, repo string, number int, labels []string) ([]github.Label, *github.Response, error)
+	RemoveLabelForIssue(owner, repo string, number int, label string) (*github.Response, error)
 }
 
 func setPRHeadStatus(issueable Issueable, status *github.RepoStatus, pullRequests PullRequests, repositories Repositories) *ErrorResponse {
@@ -67,6 +68,15 @@ func addLabel(repository Repository, issueNumber int, label string, issues Issue
 	_, _, err := issues.AddLabelsToIssue(repository.Owner, repository.Name, issueNumber, []string{label})
 	if err != nil {
 		message := fmt.Sprintf("Failed to set the label %s for issue #%d", label, issueNumber)
+		return &ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	return nil
+}
+
+func removeLabel(repository Repository, issueNumber int, label string, issues Issues) *ErrorResponse {
+	_, err := issues.RemoveLabelForIssue(repository.Owner, repository.Name, issueNumber, label)
+	if err != nil {
+		message := fmt.Sprintf("Failed to remove the label %s for issue #%d", label, issueNumber)
 		return &ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	return nil
