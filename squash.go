@@ -20,19 +20,7 @@ func handleSquashCommand(issueComment IssueComment, git Git, pullRequests PullRe
 	if errResp != nil {
 		return errResp
 	}
-	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
-	err := squash(pr, git, repositories)
-	if err == RebaseError {
-		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
-		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
-		if errResp := setStatus(issueComment.Repository, *pr.Head.SHA, status, repositories); errResp != nil {
-			return errResp
-		}
-		return SuccessResponse{}
-	} else if err != nil {
-		return ErrorResponse{err, http.StatusInternalServerError, "Failed to squash the commits in the PR"}
-	}
-	return SuccessResponse{}
+	return squashAndReportFailure(pr, git, repositories)
 }
 
 func checkForFixupCommits(pullRequestEvent PullRequestEvent, pullRequests PullRequests, repositories Repositories) Response {
@@ -70,6 +58,28 @@ func createSquashStatus(state, description string) *github.RepoStatus {
 		Description: github.String(description),
 		Context:     github.String(githubStatusSquashContext),
 	}
+}
+
+func squashAndReportFailure(pr *github.PullRequest, git Git, repositories Repositories) Response {
+	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
+	err := squash(pr, git, repositories)
+	if err == RebaseError {
+		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
+		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
+		// I'm assuming (because the documentation on this is unclear) that the
+		// status has to be reported for the Head repository. It might seem
+		// weird, because why should a bot configured for the Base repository
+		// have access to the Head repository, but AFAIK all forks must be
+		// public and reporting statuses on public repos is always allowed.
+		headRepository := internalRepositoryRepresentation(pr.Head.Repo)
+		if errResp := setStatus(headRepository, *pr.Head.SHA, status, repositories); errResp != nil {
+			return errResp
+		}
+		return SuccessResponse{}
+	} else if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to squash the commits in the PR"}
+	}
+	return SuccessResponse{}
 }
 
 func squash(pr *github.PullRequest, git Git, repositories Repositories) error {

@@ -174,6 +174,55 @@ var _ = Describe("github-review-helper", func() {
 					})
 				})
 
+				itSquashesPR := func(pr *github.PullRequest) {
+					var (
+						repo *MockRepo
+
+						baseRef = *pr.Base.Ref
+						headRef = *pr.Head.Ref
+						headSHA = *pr.Head.SHA
+					)
+
+					BeforeEach(func() {
+						repo = new(MockRepo)
+						git.On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).Return(repo, nil)
+					})
+
+					AfterEach(func() {
+						repo.AssertExpectations(GinkgoT())
+					})
+
+					Context("with autosquash failing", func() {
+						BeforeEach(func() {
+							repo.On("RebaseAutosquash", baseRef, headSHA).Return(errors.New("merge conflict"))
+						})
+
+						It("reports the failure", func() {
+							repositories.
+								On("CreateStatus", repositoryOwner, repositoryName, headSHA, mock.MatchedBy(func(status *github.RepoStatus) bool {
+									return *status.State == "failure" && *status.Context == "review/squash"
+								})).
+								Return(nil, nil, nil)
+
+							handle()
+
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						})
+					})
+
+					Context("with autosquash succeeding", func() {
+						BeforeEach(func() {
+							repo.On("RebaseAutosquash", baseRef, headSHA).Return(nil)
+						})
+
+						It("pushes the squashed changes, reports status", func() {
+							repo.On("ForcePushHeadTo", headRef).Return(nil)
+
+							handle()
+						})
+					})
+				}
+
 				Describe("!squash comment", func() {
 					BeforeEach(func() {
 						requestJSON = issueCommentEvent("!squash")
@@ -192,69 +241,31 @@ var _ = Describe("github-review-helper", func() {
 					})
 
 					Context("with GitHub request succeeding", func() {
-						var (
-							repo *MockRepo
-
-							baseRef = "master"
-							baseSHA = "1234"
-							headRef = "feature"
-							headSHA = "1235"
-						)
+						pr := &github.PullRequest{
+							Base: &github.PullRequestBranch{
+								SHA: github.String("1234"),
+								Ref: github.String("master"),
+							},
+							Head: &github.PullRequestBranch{
+								SHA: github.String("1235"),
+								Ref: github.String("feature"),
+								Repo: &github.Repository{
+									Owner: &github.User{
+										Login: github.String(repositoryOwner),
+									},
+									Name:   github.String(repositoryName),
+									SSHURL: github.String(sshURL),
+								},
+							},
+						}
 
 						BeforeEach(func() {
-							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
-								Base: &github.PullRequestBranch{
-									SHA: github.String(baseSHA),
-									Ref: github.String(baseRef),
-								},
-								Head: &github.PullRequestBranch{
-									SHA: github.String(headSHA),
-									Ref: github.String(headRef),
-									Repo: &github.Repository{
-										Owner: &github.User{
-											Login: github.String(repositoryOwner),
-										},
-										Name:   github.String(repositoryName),
-										SSHURL: github.String(sshURL),
-									},
-								},
-							}, nil, nil)
-							repo = new(MockRepo)
-							git.On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).Return(repo, nil)
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(pr, nil, nil)
 						})
 
-						AfterEach(func() {
-							repo.AssertExpectations(GinkgoT())
-						})
-
-						Context("with autosquash failing", func() {
-							BeforeEach(func() {
-								repo.On("RebaseAutosquash", baseRef, headSHA).Return(errors.New("merge conflict"))
-							})
-
-							It("reports the failure", func() {
-								repositories.On("CreateStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
-
-								handle()
-
-								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-								status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
-								Expect(*status.State).To(Equal("failure"))
-								Expect(*status.Context).To(Equal("review/squash"))
-							})
-						})
-
-						Context("with autosquash succeeding", func() {
-							BeforeEach(func() {
-								repo.On("RebaseAutosquash", baseRef, headSHA).Return(nil)
-							})
-
-							It("pushes the squashed changes, reports status", func() {
-								repo.On("ForcePushHeadTo", headRef).Return(nil)
-
-								handle()
-							})
-						})
+						itSquashesPR(pr)
 					})
 				})
 
@@ -330,29 +341,43 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with the PR being mergeable", func() {
 							headRef := "feature"
+							pr := &github.PullRequest{
+								Merged:    github.Bool(false),
+								Mergeable: github.Bool(true),
+								Base: &github.PullRequestBranch{
+									SHA: github.String("1234"),
+									Ref: github.String("master"),
+									Repo: &github.Repository{
+										Owner: &github.User{
+											Login: github.String(repositoryOwner),
+										},
+										Name:   github.String(repositoryName),
+										SSHURL: github.String(sshURL),
+									},
+								},
+								Head: &github.PullRequestBranch{
+									SHA: github.String("1235"),
+									Ref: github.String(headRef),
+									Repo: &github.Repository{
+										Owner: &github.User{
+											Login: github.String(repositoryOwner),
+										},
+										Name:   github.String(repositoryName),
+										SSHURL: github.String(sshURL),
+									},
+								},
+							}
 
 							BeforeEach(func() {
-								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
-									Merged:    github.Bool(false),
-									Mergeable: github.Bool(true),
-									Head: &github.PullRequestBranch{
-										Ref: github.String(headRef),
-										Repo: &github.Repository{
-											Owner: &github.User{
-												Login: github.String(repositoryOwner),
-											},
-											Name: github.String(repositoryName),
-										},
-									},
-								}, nil, nil)
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(pr, nil, nil)
 							})
 
-							Context("with combined state being pending", func() {
+							Context("with combined state being failing", func() {
 								BeforeEach(func() {
 									repositories.
 										On("GetCombinedStatus", repositoryOwner, repositoryName, headRef, mock.AnythingOfType("*github.ListOptions")).
 										Return(&github.CombinedStatus{
-											State: github.String("pending"),
+											State: github.String("failing"),
 										}, &github.Response{}, nil)
 								})
 
@@ -360,6 +385,43 @@ var _ = Describe("github-review-helper", func() {
 									handle()
 									Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 								})
+							})
+
+							Context("with a pending squash status in paged combined status request", func() {
+								BeforeEach(func() {
+									repositories.
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headRef, &github.ListOptions{
+											Page:    1,
+											PerPage: 100,
+										}).
+										Return(&github.CombinedStatus{
+											State: github.String("pending"),
+											Statuses: []github.RepoStatus{
+												github.RepoStatus{
+													Context: github.String("jenkins/pr"),
+													State:   github.String("success"),
+												},
+											},
+										}, &github.Response{
+											NextPage: 2,
+										}, nil)
+									repositories.
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headRef, &github.ListOptions{
+											Page:    2,
+											PerPage: 100,
+										}).
+										Return(&github.CombinedStatus{
+											State: github.String("pending"),
+											Statuses: []github.RepoStatus{
+												github.RepoStatus{
+													Context: github.String("review/squash"),
+													State:   github.String("pending"),
+												},
+											},
+										}, &github.Response{}, nil)
+								})
+
+								itSquashesPR(pr)
 							})
 
 							Context("with combined state being success", func() {

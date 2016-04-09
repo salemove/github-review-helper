@@ -71,7 +71,7 @@ func handleIssueComment(body []byte, git Git, pullRequests PullRequests, reposit
 	case isSquashCommand(issueComment.Comment):
 		return handleSquashCommand(issueComment, git, pullRequests, repositories)
 	case isMergeCommand(issueComment.Comment):
-		return handleMergeCommand(issueComment, issues, pullRequests, repositories)
+		return handleMergeCommand(issueComment, issues, pullRequests, repositories, git)
 	case isPlusOneComment.MatchString(issueComment.Comment):
 		return handlePlusOneComment(issueComment, pullRequests, repositories)
 	}

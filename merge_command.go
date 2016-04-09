@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/google/go-github/github"
 )
 
 const MergingLabel = "merging"
@@ -14,16 +16,16 @@ func isMergeCommand(comment string) bool {
 }
 
 func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests PullRequests,
-	repositories Repositories) Response {
+	repositories Repositories, git Git) Response {
 	errResp := addLabel(issueComment.Repository, issueComment.IssueNumber, MergingLabel, issues)
 	if errResp != nil {
 		return errResp
 	}
-	return mergeWithRetry(3, issueComment, issues, pullRequests, repositories)
+	return mergeWithRetry(3, issueComment, issues, pullRequests, repositories, git)
 }
 
 func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, pullRequests PullRequests,
-	repositories Repositories) Response {
+	repositories Repositories, git Git) Response {
 	pr, errResp := getPR(issueComment, pullRequests)
 	if errResp != nil {
 		return errResp
@@ -37,16 +39,18 @@ func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, p
 	} else if !*pr.Mergeable {
 		return SuccessResponse{}
 	}
-	state, _, errResp := getStatuses(issueComment.Repository, *pr.Head.Ref, repositories)
+	state, statuses, errResp := getStatuses(issueComment.Repository, *pr.Head.Ref, repositories)
 	if errResp != nil {
 		return errResp
+	} else if state == "pending" && containsPendingSquashStatus(statuses) {
+		return squashAndReportFailure(pr, git, repositories)
 	} else if state != "success" {
 		log.Printf("PR #%d has pending and/or failed statuses. Not merging.\n", issueComment.IssueNumber)
 		return SuccessResponse{}
 	}
 	err := merge(issueComment.Repository, issueComment.IssueNumber, pullRequests)
 	if err == OutdatedMergeRefError && nrOfRetries > 0 {
-		return mergeWithRetry(nrOfRetries-1, issueComment, issues, pullRequests, repositories)
+		return mergeWithRetry(nrOfRetries-1, issueComment, issues, pullRequests, repositories, git)
 	} else if err != nil {
 		message := fmt.Sprintf("Failed to merge PR #%d", issueComment.IssueNumber)
 		return ErrorResponse{err, http.StatusBadGateway, message}
@@ -57,4 +61,13 @@ func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, p
 		return errResp
 	}
 	return SuccessResponse{}
+}
+
+func containsPendingSquashStatus(statuses []github.RepoStatus) bool {
+	for _, status := range statuses {
+		if *status.Context == githubStatusSquashContext && *status.State == "pending" {
+			return true
+		}
+	}
+	return false
 }
