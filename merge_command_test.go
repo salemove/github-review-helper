@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/google/go-github/github"
-	. "github.com/salemove/github-review-helper"
+	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
 
@@ -45,7 +45,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 		Context("with github request to add the label failing", func() {
 			BeforeEach(func() {
 				issues.
-					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{MergingLabel}).
+					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
 					Return(nil, nil, errors.New("an error"))
 			})
 
@@ -58,7 +58,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 		Context("with github request to add the label succeeding", func() {
 			BeforeEach(func() {
 				issues.
-					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{MergingLabel}).
+					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
 					Return(nil, nil, nil)
 			})
 
@@ -86,7 +86,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				It("removes the 'merging' label from the PR", func() {
 					issues.
-						On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+						On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
 						Return(nil, nil, nil)
 
 					handle()
@@ -234,8 +234,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								handle()
 
 								// +1 because of the initial attempt
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", MergeRetryLimit+1)
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", MergeRetryLimit+1)
+								pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", grh.MergeRetryLimit+1)
+								pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", grh.MergeRetryLimit+1)
 								Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
 							})
 						})
@@ -255,7 +255,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 							It("removes the 'merging' label from the PR after the merge", func() {
 								issues.
-									On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+									On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
 									Return(nil, nil, nil)
 
 								handle()
@@ -302,7 +302,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 						It("removes the 'merging' label from the PR after the merge", func() {
 							issues.
-								On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+								On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
 								Return(nil, nil, nil)
 
 							handle()

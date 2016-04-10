@@ -12,7 +12,7 @@ import (
 	"strconv"
 
 	"github.com/google/go-github/github"
-	. "github.com/salemove/github-review-helper"
+	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 
 	. "github.com/onsi/ginkgo"
@@ -60,7 +60,7 @@ type WebhookTest func(WebhookTestContext)
 var TestWebhookHandler = func(test WebhookTest) bool {
 	Describe("webhook handler", func() {
 		var (
-			conf Config
+			conf grh.Config
 
 			requestJSON = NewStringMemoizer(func() string {
 				return ""
@@ -69,7 +69,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 				return nil // nil is safe to read from, unsafe to write to
 			})
 
-			handler          = new(Handler)
+			handler          = new(grh.Handler)
 			request          = new(*http.Request)
 			responseRecorder = new(*httptest.ResponseRecorder)
 			gitRepos         = new(*mocks.Repos)
@@ -86,10 +86,10 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 
 			*responseRecorder = httptest.NewRecorder()
 
-			conf = Config{
+			conf = grh.Config{
 				Secret: "a-secret",
 			}
-			*handler = CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues)
+			*handler = grh.CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues)
 		})
 
 		JustBeforeEach(func() {
