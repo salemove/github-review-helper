@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 
+	"github.com/google/go-github/github"
 	. "github.com/salemove/github-review-helper"
 
 	. "github.com/onsi/ginkgo"
@@ -24,6 +25,16 @@ const (
 	repositoryName  = "github-review-helper"
 	sshURL          = "git@github.com:salemove/github-review-helper.git"
 	issueNumber     = 7
+)
+
+var (
+	repository = &github.Repository{
+		Owner: &github.User{
+			Login: github.String(repositoryOwner),
+		},
+		Name:   github.String(repositoryName),
+		SSHURL: github.String(sshURL),
+	}
 )
 
 func TestGithubReviewHelper(t *testing.T) {
@@ -95,7 +106,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 
 			for key, vals := range headers.Get() {
 				for _, val := range vals {
-					(*request).Header.Add(key, val)
+					(*request).Header.Set(key, val)
 				}
 			}
 
@@ -140,6 +151,23 @@ var IssueCommentEvent = func(comment string) string {
   },
   "comment": {
     "body": "` + comment + `"
+  },
+  "repository": {
+    "name": "` + repositoryName + `",
+    "owner": {
+      "login": "` + repositoryOwner + `"
+    },
+    "ssh_url": "` + sshURL + `"
+  }
+}`
+}
+
+var PullRequestsEvent = func(action string) string {
+	return `{
+  "action": "` + action + `",
+  "number": ` + strconv.Itoa(issueNumber) + `,
+  "pull_request": {
+    "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
   },
   "repository": {
     "name": "` + repositoryName + `",
