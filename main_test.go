@@ -167,7 +167,9 @@ var _ = Describe("github-review-helper", func() {
 
 					BeforeEach(func() {
 						repo = new(MockRepo)
-						git.On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).Return(repo, nil)
+						git.
+							On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).
+							Return(repo, nil)
 					})
 
 					AfterEach(func() {
@@ -176,7 +178,9 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with autosquash failing", func() {
 						BeforeEach(func() {
-							repo.On("RebaseAutosquash", baseRef, headSHA).Return(errors.New("merge conflict"))
+							repo.
+								On("RebaseAutosquash", baseRef, headSHA).
+								Return(errors.New("merge conflict"))
 						})
 
 						It("reports the failure", func() {
@@ -194,11 +198,15 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with autosquash succeeding", func() {
 						BeforeEach(func() {
-							repo.On("RebaseAutosquash", baseRef, headSHA).Return(nil)
+							repo.
+								On("RebaseAutosquash", baseRef, headSHA).
+								Return(nil)
 						})
 
 						It("pushes the squashed changes, reports status", func() {
-							repo.On("ForcePushHeadTo", headRef).Return(nil)
+							repo.
+								On("ForcePushHeadTo", headRef).
+								Return(nil)
 
 							handle()
 						})
@@ -213,7 +221,9 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with GitHub request failing", func() {
 						BeforeEach(func() {
-							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(nil, nil, errors.New("an error"))
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(nil, nil, errors.New("an error"))
 						})
 
 						It("fails with a gateway error", func() {
@@ -287,9 +297,11 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with the PR being already merged", func() {
 							BeforeEach(func() {
-								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
-									Merged: github.Bool(true),
-								}, nil, nil)
+								pullRequests.
+									On("Get", repositoryOwner, repositoryName, issueNumber).
+									Return(&github.PullRequest{
+										Merged: github.Bool(true),
+									}, nil, nil)
 							})
 
 							It("removes the 'merging' label from the PR", func() {
@@ -304,10 +316,12 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with the PR not being mergeable", func() {
 							BeforeEach(func() {
-								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
-									Merged:    github.Bool(false),
-									Mergeable: github.Bool(false),
-								}, nil, nil)
+								pullRequests.
+									On("Get", repositoryOwner, repositoryName, issueNumber).
+									Return(&github.PullRequest{
+										Merged:    github.Bool(false),
+										Mergeable: github.Bool(false),
+									}, nil, nil)
 							})
 
 							It("succeeds", func() {
@@ -334,7 +348,9 @@ var _ = Describe("github-review-helper", func() {
 							}
 
 							BeforeEach(func() {
-								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(pr, nil, nil)
+								pullRequests.
+									On("Get", repositoryOwner, repositoryName, issueNumber).
+									Return(pr, nil, nil)
 							})
 
 							Context("with combined state being failing", func() {
