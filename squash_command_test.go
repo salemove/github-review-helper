@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-github/github"
 	. "github.com/salemove/github-review-helper"
+	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
 
 	. "github.com/onsi/ginkgo"
@@ -81,8 +82,8 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 		responseRecorder *httptest.ResponseRecorder
 		repositories     *MockRepositories
-		git              *MockGit
-		repo             *MockRepo
+		gitRepos         *mocks.Repos
+		gitRepo          *mocks.Repo
 
 		baseRef = *pr.Base.Ref
 		headRef = *pr.Head.Ref
@@ -92,21 +93,21 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 	BeforeEach(func() {
 		responseRecorder = *context.ResponseRecorder
 		repositories = *context.Repositories
-		git = *context.Git
+		gitRepos = *context.GitRepos
 
-		repo = new(MockRepo)
-		git.
+		gitRepo = new(mocks.Repo)
+		gitRepos.
 			On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).
-			Return(repo, nil)
+			Return(gitRepo, nil)
 	})
 
 	AfterEach(func() {
-		repo.AssertExpectations(GinkgoT())
+		gitRepo.AssertExpectations(GinkgoT())
 	})
 
 	Context("with autosquash failing", func() {
 		BeforeEach(func() {
-			repo.
+			gitRepo.
 				On("RebaseAutosquash", baseRef, headSHA).
 				Return(errors.New("merge conflict"))
 		})
@@ -126,13 +127,13 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 	Context("with autosquash succeeding", func() {
 		BeforeEach(func() {
-			repo.
+			gitRepo.
 				On("RebaseAutosquash", baseRef, headSHA).
 				Return(nil)
 		})
 
 		It("pushes the squashed changes, reports status", func() {
-			repo.
+			gitRepo.
 				On("ForcePushHeadTo", headRef).
 				Return(nil)
 

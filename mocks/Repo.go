@@ -1,12 +1,12 @@
-package main
+package mocks
 
 import "github.com/stretchr/testify/mock"
 
-type MockRepo struct {
+type Repo struct {
 	mock.Mock
 }
 
-func (_m *MockRepo) Fetch() error {
+func (_m *Repo) Fetch() error {
 	ret := _m.Called()
 
 	var r0 error
@@ -18,7 +18,7 @@ func (_m *MockRepo) Fetch() error {
 
 	return r0
 }
-func (_m *MockRepo) RebaseAutosquash(upstreamRef string, branchRef string) error {
+func (_m *Repo) RebaseAutosquash(upstreamRef string, branchRef string) error {
 	ret := _m.Called(upstreamRef, branchRef)
 
 	var r0 error
@@ -30,7 +30,7 @@ func (_m *MockRepo) RebaseAutosquash(upstreamRef string, branchRef string) error
 
 	return r0
 }
-func (_m *MockRepo) ForcePushHeadTo(remoteRef string) error {
+func (_m *Repo) ForcePushHeadTo(remoteRef string) error {
 	ret := _m.Called(remoteRef)
 
 	var r0 error
@@ -42,7 +42,7 @@ func (_m *MockRepo) ForcePushHeadTo(remoteRef string) error {
 
 	return r0
 }
-func (_m *MockRepo) GetHeadSHA() (string, error) {
+func (_m *Repo) GetHeadSHA() (string, error) {
 	ret := _m.Called()
 
 	var r0 string

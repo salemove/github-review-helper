@@ -1,4 +1,4 @@
-package main
+package git
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-type Git interface {
+type Repos interface {
 	// GetUpdateRepo either clones the specified repository if it hasn't been cloned yet or simply
 	// fetches the latest changes for it. Returns the Repo in any case.
 	GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error)
@@ -25,21 +25,21 @@ type Repo interface {
 	GetHeadSHA() (string, error)
 }
 
-type git struct {
+type repos struct {
 	sync.Mutex
 	basePath string
 	repos    map[string]*repo
 }
 
-// NewGit creates a new Git implementation which will hold all its repos in the specified base path
-func NewGit(basePath string) Git {
-	return &git{
+// NewRepos creates a new Repos instance which will hold all its repos in the specified base path
+func NewRepos(basePath string) Repos {
+	return &repos{
 		basePath: basePath,
 		repos:    make(map[string]*repo),
 	}
 }
 
-func (g *git) repo(path string) Repo {
+func (g *repos) repo(path string) Repo {
 	existingRepo, exists := g.repos[path]
 	if !exists {
 		newRepo := &repo{path: path}
@@ -49,14 +49,14 @@ func (g *git) repo(path string) Repo {
 	return existingRepo
 }
 
-func (g *git) clone(url, localPath string) (Repo, error) {
+func (g *repos) clone(url, localPath string) (Repo, error) {
 	if err := exec.Command("git", "clone", url, localPath).Run(); err != nil {
 		return nil, fmt.Errorf("failed to clone: %v", err)
 	}
 	return g.repo(localPath), nil
 }
 
-func (g *git) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
+func (g *repos) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
 	g.Lock()
 	defer g.Unlock()
 

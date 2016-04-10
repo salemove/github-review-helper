@@ -11,6 +11,7 @@ import (
 	"gopkg.in/tylerb/graceful.v1"
 
 	"github.com/google/go-github/github"
+	"github.com/salemove/github-review-helper/git"
 	"golang.org/x/oauth2"
 )
 
@@ -28,15 +29,15 @@ func main() {
 	}
 	defer os.RemoveAll(reposDir)
 
-	git := NewGit(reposDir)
+	gitRepos := git.NewRepos(reposDir)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", CreateHandler(conf, git, githubClient.PullRequests, githubClient.Repositories, githubClient.Issues))
+	mux.Handle("/", CreateHandler(conf, gitRepos, githubClient.PullRequests, githubClient.Repositories, githubClient.Issues))
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
 }
 
-func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories Repositories, issues Issues) Handler {
+func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories, issues Issues) Handler {
 	return func(w http.ResponseWriter, r *http.Request) Response {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -48,7 +49,7 @@ func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories
 		eventType := r.Header.Get("X-Github-Event")
 		switch eventType {
 		case "issue_comment":
-			return handleIssueComment(body, git, pullRequests, repositories, issues)
+			return handleIssueComment(body, gitRepos, pullRequests, repositories, issues)
 		case "pull_request":
 			return handlePullRequestEvent(body, pullRequests, repositories)
 		}
@@ -59,7 +60,7 @@ func CreateHandler(conf Config, git Git, pullRequests PullRequests, repositories
 // isPlusOneComment matches strings that contain either a +1 (not followed by other digits) or a :+1: emoji
 var isPlusOneComment = regexp.MustCompile(`\+1($|\D)`)
 
-func handleIssueComment(body []byte, git Git, pullRequests PullRequests, repositories Repositories, issues Issues) Response {
+func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories, issues Issues) Response {
 	issueComment, err := parseIssueComment(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
@@ -69,9 +70,9 @@ func handleIssueComment(body []byte, git Git, pullRequests PullRequests, reposit
 	}
 	switch {
 	case isSquashCommand(issueComment.Comment):
-		return handleSquashCommand(issueComment, git, pullRequests, repositories)
+		return handleSquashCommand(issueComment, gitRepos, pullRequests, repositories)
 	case isMergeCommand(issueComment.Comment):
-		return handleMergeCommand(issueComment, issues, pullRequests, repositories, git)
+		return handleMergeCommand(issueComment, issues, pullRequests, repositories, gitRepos)
 	case isPlusOneComment.MatchString(issueComment.Comment):
 		return handlePlusOneComment(issueComment, pullRequests, repositories)
 	}

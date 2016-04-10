@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/go-github/github"
 	. "github.com/salemove/github-review-helper"
+	"github.com/salemove/github-review-helper/mocks"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -48,7 +49,7 @@ type WebhookTestContext struct {
 	Headers          StringMapMemoizer
 	Handle           func()
 	ResponseRecorder **httptest.ResponseRecorder
-	Git              **MockGit
+	GitRepos         **mocks.Repos
 	PullRequests     **MockPullRequests
 	Repositories     **MockRepositories
 	Issues           **MockIssues
@@ -71,14 +72,14 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			handler          = new(Handler)
 			request          = new(*http.Request)
 			responseRecorder = new(*httptest.ResponseRecorder)
-			git              = new(*MockGit)
+			gitRepos         = new(*mocks.Repos)
 			pullRequests     = new(*MockPullRequests)
 			repositories     = new(*MockRepositories)
 			issues           = new(*MockIssues)
 		)
 
 		BeforeEach(func() {
-			*git = new(MockGit)
+			*gitRepos = new(mocks.Repos)
 			*pullRequests = new(MockPullRequests)
 			*repositories = new(MockRepositories)
 			*issues = new(MockIssues)
@@ -88,7 +89,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			conf = Config{
 				Secret: "a-secret",
 			}
-			*handler = CreateHandler(conf, *git, *pullRequests, *repositories, *issues)
+			*handler = CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues)
 		})
 
 		JustBeforeEach(func() {
@@ -111,7 +112,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 		})
 
 		AfterEach(func() {
-			(*git).AssertExpectations(GinkgoT())
+			(*gitRepos).AssertExpectations(GinkgoT())
 			(*pullRequests).AssertExpectations(GinkgoT())
 			(*repositories).AssertExpectations(GinkgoT())
 			(*issues).AssertExpectations(GinkgoT())
@@ -127,7 +128,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			Headers:          headers,
 			Handle:           handle,
 			ResponseRecorder: responseRecorder,
-			Git:              git,
+			GitRepos:         gitRepos,
 			PullRequests:     pullRequests,
 			Repositories:     repositories,
 			Issues:           issues,
