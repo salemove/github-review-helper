@@ -1,14 +1,14 @@
-package main
+package mocks
 
 import "github.com/stretchr/testify/mock"
 
 import "github.com/google/go-github/github"
 
-type MockRepositories struct {
+type Repositories struct {
 	mock.Mock
 }
 
-func (_m *MockRepositories) CreateStatus(owner string, repo string, ref string, status *github.RepoStatus) (*github.RepoStatus, *github.Response, error) {
+func (_m *Repositories) CreateStatus(owner string, repo string, ref string, status *github.RepoStatus) (*github.RepoStatus, *github.Response, error) {
 	ret := _m.Called(owner, repo, ref, status)
 
 	var r0 *github.RepoStatus
@@ -38,7 +38,7 @@ func (_m *MockRepositories) CreateStatus(owner string, repo string, ref string, 
 
 	return r0, r1, r2
 }
-func (_m *MockRepositories) GetCombinedStatus(owner string, repo string, ref string, opt *github.ListOptions) (*github.CombinedStatus, *github.Response, error) {
+func (_m *Repositories) GetCombinedStatus(owner string, repo string, ref string, opt *github.ListOptions) (*github.CombinedStatus, *github.Response, error) {
 	ret := _m.Called(owner, repo, ref, opt)
 
 	var r0 *github.CombinedStatus

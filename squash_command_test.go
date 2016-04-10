@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 
 	"github.com/google/go-github/github"
-	. "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
 
@@ -22,7 +21,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			requestJSON = context.RequestJSON
 
 			responseRecorder *httptest.ResponseRecorder
-			pullRequests     *MockPullRequests
+			pullRequests     *mocks.PullRequests
 		)
 		BeforeEach(func() {
 			responseRecorder = *context.ResponseRecorder
@@ -81,7 +80,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 		handle = context.Handle
 
 		responseRecorder *httptest.ResponseRecorder
-		repositories     *MockRepositories
+		repositories     *mocks.Repositories
 		gitRepos         *mocks.Repos
 		gitRepo          *mocks.Repo
 

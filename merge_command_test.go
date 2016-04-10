@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-github/github"
 	. "github.com/salemove/github-review-helper"
+	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
 
 	. "github.com/onsi/ginkgo"
@@ -21,9 +22,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			requestJSON = context.RequestJSON
 
 			responseRecorder *httptest.ResponseRecorder
-			pullRequests     *MockPullRequests
-			repositories     *MockRepositories
-			issues           *MockIssues
+			pullRequests     *mocks.PullRequests
+			repositories     *mocks.Repositories
+			issues           *mocks.Issues
 		)
 		BeforeEach(func() {
 			responseRecorder = *context.ResponseRecorder

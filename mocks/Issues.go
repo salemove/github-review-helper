@@ -1,14 +1,14 @@
-package main
+package mocks
 
 import "github.com/stretchr/testify/mock"
 
 import "github.com/google/go-github/github"
 
-type MockIssues struct {
+type Issues struct {
 	mock.Mock
 }
 
-func (_m *MockIssues) AddLabelsToIssue(owner string, repo string, number int, labels []string) ([]github.Label, *github.Response, error) {
+func (_m *Issues) AddLabelsToIssue(owner string, repo string, number int, labels []string) ([]github.Label, *github.Response, error) {
 	ret := _m.Called(owner, repo, number, labels)
 
 	var r0 []github.Label
@@ -38,7 +38,7 @@ func (_m *MockIssues) AddLabelsToIssue(owner string, repo string, number int, la
 
 	return r0, r1, r2
 }
-func (_m *MockIssues) RemoveLabelForIssue(owner string, repo string, number int, label string) (*github.Response, error) {
+func (_m *Issues) RemoveLabelForIssue(owner string, repo string, number int, label string) (*github.Response, error) {
 	ret := _m.Called(owner, repo, number, label)
 
 	var r0 *github.Response

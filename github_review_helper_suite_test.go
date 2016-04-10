@@ -50,9 +50,9 @@ type WebhookTestContext struct {
 	Handle           func()
 	ResponseRecorder **httptest.ResponseRecorder
 	GitRepos         **mocks.Repos
-	PullRequests     **MockPullRequests
-	Repositories     **MockRepositories
-	Issues           **MockIssues
+	PullRequests     **mocks.PullRequests
+	Repositories     **mocks.Repositories
+	Issues           **mocks.Issues
 }
 
 type WebhookTest func(WebhookTestContext)
@@ -73,16 +73,16 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			request          = new(*http.Request)
 			responseRecorder = new(*httptest.ResponseRecorder)
 			gitRepos         = new(*mocks.Repos)
-			pullRequests     = new(*MockPullRequests)
-			repositories     = new(*MockRepositories)
-			issues           = new(*MockIssues)
+			pullRequests     = new(*mocks.PullRequests)
+			repositories     = new(*mocks.Repositories)
+			issues           = new(*mocks.Issues)
 		)
 
 		BeforeEach(func() {
 			*gitRepos = new(mocks.Repos)
-			*pullRequests = new(MockPullRequests)
-			*repositories = new(MockRepositories)
-			*issues = new(MockIssues)
+			*pullRequests = new(mocks.PullRequests)
+			*repositories = new(mocks.Repositories)
+			*issues = new(mocks.Issues)
 
 			*responseRecorder = httptest.NewRecorder()
 

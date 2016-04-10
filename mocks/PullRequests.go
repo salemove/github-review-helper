@@ -1,14 +1,14 @@
-package main
+package mocks
 
 import "github.com/stretchr/testify/mock"
 
 import "github.com/google/go-github/github"
 
-type MockPullRequests struct {
+type PullRequests struct {
 	mock.Mock
 }
 
-func (_m *MockPullRequests) Get(owner string, repo string, number int) (*github.PullRequest, *github.Response, error) {
+func (_m *PullRequests) Get(owner string, repo string, number int) (*github.PullRequest, *github.Response, error) {
 	ret := _m.Called(owner, repo, number)
 
 	var r0 *github.PullRequest
@@ -38,7 +38,7 @@ func (_m *MockPullRequests) Get(owner string, repo string, number int) (*github.
 
 	return r0, r1, r2
 }
-func (_m *MockPullRequests) ListCommits(owner string, repo string, number int, opt *github.ListOptions) ([]github.RepositoryCommit, *github.Response, error) {
+func (_m *PullRequests) ListCommits(owner string, repo string, number int, opt *github.ListOptions) ([]github.RepositoryCommit, *github.Response, error) {
 	ret := _m.Called(owner, repo, number, opt)
 
 	var r0 []github.RepositoryCommit
@@ -68,7 +68,7 @@ func (_m *MockPullRequests) ListCommits(owner string, repo string, number int, o
 
 	return r0, r1, r2
 }
-func (_m *MockPullRequests) Merge(owner string, repo string, number int, commitMessage string) (*github.PullRequestMergeResult, *github.Response, error) {
+func (_m *PullRequests) Merge(owner string, repo string, number int, commitMessage string) (*github.PullRequestMergeResult, *github.Response, error) {
 	ret := _m.Called(owner, repo, number, commitMessage)
 
 	var r0 *github.PullRequestMergeResult
