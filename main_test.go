@@ -18,13 +18,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const (
-	repositoryOwner = "salemove"
-	repositoryName  = "github-review-helper"
-	sshURL          = "git@github.com:salemove/github-review-helper.git"
-	issueNumber     = 7
-)
-
 var (
 	repository = &github.Repository{
 		Owner: &github.User{
@@ -133,27 +126,6 @@ var _ = Describe("github-review-helper", func() {
 			})
 		})
 
-		var issueCommentEvent = func(comment string) string {
-			return `{
-  "issue": {
-    "number": ` + strconv.Itoa(issueNumber) + `,
-    "pull_request": {
-      "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
-    }
-  },
-  "comment": {
-    "body": "` + comment + `"
-  },
-  "repository": {
-    "name": "` + repositoryName + `",
-    "owner": {
-      "login": "` + repositoryOwner + `"
-    },
-    "ssh_url": "` + sshURL + `"
-  }
-}`
-		}
-
 		Context("with a valid signature", func() {
 			var mockSignature func()
 
@@ -173,7 +145,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Context("with an arbitrary comment", func() {
 					BeforeEach(func() {
-						requestJSON = issueCommentEvent("just a simple comment")
+						requestJSON = IssueCommentEvent("just a simple comment")
 						mockSignature()
 					})
 
@@ -235,7 +207,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Describe("!squash comment", func() {
 					BeforeEach(func() {
-						requestJSON = issueCommentEvent("!squash")
+						requestJSON = IssueCommentEvent("!squash")
 						mockSignature()
 					})
 
@@ -276,7 +248,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Describe("!merge comment", func() {
 					BeforeEach(func() {
-						requestJSON = issueCommentEvent("!merge")
+						requestJSON = IssueCommentEvent("!merge")
 						mockSignature()
 					})
 
@@ -546,61 +518,6 @@ var _ = Describe("github-review-helper", func() {
 					})
 				})
 
-				Describe("+1 comment", func() {
-					var commitRevision = "1235"
-					var itMarksCommitPeerReviewed = func() {
-						Context("with GitHub request failing", func() {
-							BeforeEach(func() {
-								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(nil, nil, errors.New("an error"))
-							})
-
-							It("fails with a gateway error", func() {
-								handle()
-								Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
-							})
-						})
-
-						Context("with GitHub request succeeding", func() {
-							BeforeEach(func() {
-								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
-									Head: &github.PullRequestBranch{
-										SHA:  github.String(commitRevision),
-										Repo: repository,
-									},
-								}, nil, nil)
-							})
-
-							It("reports the status", func() {
-								repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
-
-								handle()
-
-								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-								status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
-								Expect(*status.State).To(Equal("success"))
-								Expect(*status.Context).To(Equal("review/peer"))
-							})
-						})
-					}
-
-					Context("with +1 at the beginning of the comment", func() {
-						BeforeEach(func() {
-							requestJSON = issueCommentEvent("+1, awesome job!")
-							mockSignature()
-						})
-
-						itMarksCommitPeerReviewed()
-					})
-
-					Context("with +1 at the end of the comment", func() {
-						BeforeEach(func() {
-							requestJSON = issueCommentEvent("Looking good! +1")
-							mockSignature()
-						})
-
-						itMarksCommitPeerReviewed()
-					})
-				})
 			})
 
 			var pullRequestsEvent = func(action string) string {
