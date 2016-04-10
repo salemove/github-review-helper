@@ -76,20 +76,32 @@ var _ = TestWebhookHandler(func(requestJSON StringMemoizer, headers StringMapMem
 			}
 		})
 
-		Context("with +1 at the beginning of the comment", func() {
+		positiveTests := map[string]string{
+			"with +1 at the beginning of the comment": "+1, awesome job!",
+			"with +1 at the end of the comment":       "Looking good! +1",
+			"with +1 in the middle of the comment":    "Good job! +1 PS: Don't forget to update that other thing.",
+			"with +1 smiley":                          "Good job! :+1:",
+		}
+		for desc, comment := range positiveTests {
+			Context(desc, func() {
+				requestJSON.Is(func() string {
+					return IssueCommentEvent(comment)
+				})
+
+				itMarksCommitPeerReviewed()
+			})
+		}
+
+		Context("with +1 as a part of a number", func() {
 			requestJSON.Is(func() string {
-				return IssueCommentEvent("+1, awesome job!")
+				return IssueCommentEvent("Wow +1832 -534 changes. Slow down!")
 			})
 
-			itMarksCommitPeerReviewed()
-		})
-
-		Context("with +1 at the end of the comment", func() {
-			requestJSON.Is(func() string {
-				return IssueCommentEvent("Looking good! +1")
+			It("ignores the comment", func() {
+				handle()
+				Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+				Expect(responseRecorder.Body.String()).To(ContainSubstring("Ignoring"))
 			})
-
-			itMarksCommitPeerReviewed()
 		})
 	})
 })
