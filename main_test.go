@@ -462,10 +462,12 @@ var _ = Describe("github-review-helper", func() {
 											mockMergeFailWithConflict()
 										})
 
-										It("retries 3 times and fails with a gateway error", func() {
+										It("retries and fails with a gateway error", func() {
 											handle()
-											pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", 4)
-											pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", 4)
+
+											// +1 because of the initial attempt
+											pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", MergeRetryLimit+1)
+											pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", MergeRetryLimit+1)
 											Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
 										})
 									})

@@ -9,7 +9,10 @@ import (
 	"github.com/google/go-github/github"
 )
 
-const MergingLabel = "merging"
+const (
+	MergingLabel    = "merging"
+	MergeRetryLimit = 3
+)
 
 func isMergeCommand(comment string) bool {
 	return strings.TrimSpace(comment) == "!merge"
@@ -21,7 +24,7 @@ func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests P
 	if errResp != nil {
 		return errResp
 	}
-	return mergeWithRetry(3, issueComment, issues, pullRequests, repositories, git)
+	return mergeWithRetry(MergeRetryLimit, issueComment, issues, pullRequests, repositories, git)
 }
 
 func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, pullRequests PullRequests,
