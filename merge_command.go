@@ -53,7 +53,7 @@ func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, p
 		return SuccessResponse{}
 	}
 	err := merge(issueComment.Repository, issueComment.IssueNumber, pullRequests)
-	if err == OutdatedMergeRefError && nrOfRetries > 0 {
+	if err == ErrOutdatedMergeRef && nrOfRetries > 0 {
 		return mergeWithRetry(nrOfRetries-1, issueComment, issues, pullRequests, repositories, gitRepos)
 	} else if err != nil {
 		message := fmt.Sprintf("Failed to merge PR #%d", issueComment.IssueNumber)

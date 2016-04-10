@@ -10,7 +10,7 @@ import (
 	"github.com/salemove/github-review-helper/git"
 )
 
-var RebaseError = errors.New("Rebase failed")
+var ErrRebase = errors.New("Rebase failed")
 
 func isSquashCommand(comment string) bool {
 	return strings.TrimSpace(comment) == "!squash"
@@ -64,7 +64,7 @@ func createSquashStatus(state, description string) *github.RepoStatus {
 func squashAndReportFailure(pr *github.PullRequest, gitRepos git.Repos, repositories Repositories) Response {
 	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
 	err := squash(pr, gitRepos, repositories)
-	if err == RebaseError {
+	if err == ErrRebase {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
 		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
 		if errResp := setStatus(pr, status, repositories); errResp != nil {
@@ -84,7 +84,7 @@ func squash(pr *github.PullRequest, gitRepos git.Repos, repositories Repositorie
 		return errors.New("Failed to update the local repo")
 	}
 	if err = gitRepo.RebaseAutosquash(*pr.Base.Ref, *pr.Head.SHA); err != nil {
-		return RebaseError
+		return ErrRebase
 	}
 	if err = gitRepo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
 		return errors.New("Failed to push the squashed version")
