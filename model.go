@@ -53,10 +53,10 @@ func (i Issue) FullName() string {
 	return fmt.Sprintf("%s/%s#%d", i.Repository.Owner, i.Repository.Name, i.Number)
 }
 
-func internalRepositoryRepresentation(githubRepository *github.Repository) Repository {
+func HeadRepository(pr *github.PullRequest) Repository {
 	return Repository{
-		Owner: *githubRepository.Owner.Login,
-		Name:  *githubRepository.Name,
-		URL:   *githubRepository.SSHURL,
+		Owner: *pr.Head.Repo.Owner.Login,
+		Name:  *pr.Head.Repo.Name,
+		URL:   *pr.Head.Repo.SSHURL,
 	}
 }

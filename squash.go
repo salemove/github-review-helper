@@ -77,7 +77,7 @@ func squashAndReportFailure(pr *github.PullRequest, git Git, repositories Reposi
 }
 
 func squash(pr *github.PullRequest, git Git, repositories Repositories) error {
-	headRepository := internalRepositoryRepresentation(pr.Head.Repo)
+	headRepository := HeadRepository(pr)
 	repo, err := git.GetUpdatedRepo(headRepository.URL, headRepository.Owner, headRepository.Name)
 	if err != nil {
 		return errors.New("Failed to update the local repo")

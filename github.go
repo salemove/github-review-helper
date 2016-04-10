@@ -41,7 +41,7 @@ func setStatus(pr *github.PullRequest, status *github.RepoStatus, repositories R
 	// weird, because why should a bot configured for the Base repository
 	// have access to the Head repository, but AFAIK all forks must be
 	// public and reporting statuses on public repos is always allowed.
-	headRepository := internalRepositoryRepresentation(pr.Head.Repo)
+	headRepository := HeadRepository(pr)
 	_, _, err := repositories.CreateStatus(headRepository.Owner, headRepository.Name, *pr.Head.SHA, status)
 	if err != nil {
 		message := fmt.Sprintf("Failed to create a %s status for commit %s", *status.State, *pr.Head.SHA)
@@ -51,7 +51,7 @@ func setStatus(pr *github.PullRequest, status *github.RepoStatus, repositories R
 }
 
 func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []github.RepoStatus, *ErrorResponse) {
-	headRepository := internalRepositoryRepresentation(pr.Head.Repo)
+	headRepository := HeadRepository(pr)
 	pageNr := 1
 	statuses := []github.RepoStatus{}
 	var state string
