@@ -10,8 +10,8 @@ type StringMemoizer interface {
 }
 
 type StringMapMemoizer interface {
-	Get() map[string][]string
-	Is(func() map[string][]string)
+	Get() map[string]string
+	Is(func() map[string]string)
 }
 
 type stringMemoizer struct {
@@ -21,8 +21,8 @@ type stringMemoizer struct {
 }
 
 type stringMapMemoizer struct {
-	value   map[string][]string
-	stack   []func() map[string][]string
+	value   map[string]string
+	stack   []func() map[string]string
 	invoked bool
 }
 
@@ -35,9 +35,9 @@ func NewStringMemoizer(cb func() string) StringMemoizer {
 	return memo
 }
 
-func NewStringMapMemoizer(cb func() map[string][]string) StringMapMemoizer {
+func NewStringMapMemoizer(cb func() map[string]string) StringMapMemoizer {
 	memo := &stringMapMemoizer{
-		stack:   []func() map[string][]string{},
+		stack:   []func() map[string]string{},
 		invoked: false,
 	}
 	memo.Is(cb)
@@ -56,7 +56,7 @@ func (s *stringMemoizer) Is(cb func() string) {
 	})
 }
 
-func (s *stringMapMemoizer) Is(cb func() map[string][]string) {
+func (s *stringMapMemoizer) Is(cb func() map[string]string) {
 	BeforeEach(func() {
 		s.stack = append(s.stack, cb)
 	})
@@ -80,7 +80,7 @@ func (s *stringMemoizer) Get() string {
 	return s.value
 }
 
-func (s *stringMapMemoizer) Get() map[string][]string {
+func (s *stringMapMemoizer) Get() map[string]string {
 	if len(s.stack) == 0 {
 		Fail("Memoized function called outside test example scope")
 	}

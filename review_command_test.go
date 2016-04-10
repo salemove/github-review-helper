@@ -73,9 +73,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			})
 		}
 
-		headers.Is(func() map[string][]string {
-			return map[string][]string{
-				"X-Github-Event": []string{"issue_comment"},
+		headers.Is(func() map[string]string {
+			return map[string]string{
+				"X-Github-Event": "issue_comment",
 			}
 		})
 

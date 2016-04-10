@@ -26,9 +26,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 		})
 
 		Context("with an empty X-Hub-Signature header", func() {
-			headers.Is(func() map[string][]string {
-				return map[string][]string{
-					"X-Hub-Signature": []string{""},
+			headers.Is(func() map[string]string {
+				return map[string]string{
+					"X-Hub-Signature": "",
 				}
 			})
 			It("fails with StatusUnauthorized", func() {
@@ -41,9 +41,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			requestJSON.Is(func() string {
 				return "{}"
 			})
-			headers.Is(func() map[string][]string {
-				return map[string][]string{
-					"X-Hub-Signature": []string{"sha1=2f539a59127d552f4565b1a114ec8f4fa2d55f55"},
+			headers.Is(func() map[string]string {
+				return map[string]string{
+					"X-Hub-Signature": "sha1=2f539a59127d552f4565b1a114ec8f4fa2d55f55",
 				}
 			})
 
@@ -58,9 +58,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			requestJSON.Is(func() string {
 				return "{}"
 			})
-			headers.Is(func() map[string][]string {
-				return map[string][]string{
-					"X-Hub-Signature": []string{validSignature},
+			headers.Is(func() map[string]string {
+				return map[string]string{
+					"X-Hub-Signature": validSignature,
 				}
 			})
 
@@ -71,10 +71,10 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			})
 
 			Context("with a gibberish event", func() {
-				headers.Is(func() map[string][]string {
-					return map[string][]string{
-						"X-Hub-Signature": []string{validSignature},
-						"X-Github-Event":  []string{"gibberish"},
+				headers.Is(func() map[string]string {
+					return map[string]string{
+						"X-Hub-Signature": validSignature,
+						"X-Github-Event":  "gibberish",
 					}
 				})
 
@@ -88,9 +88,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 		Context("with a valid signature", func() {
 			Describe("issue_comment event", func() {
-				headers.Is(func() map[string][]string {
-					return map[string][]string{
-						"X-Github-Event": []string{"issue_comment"},
+				headers.Is(func() map[string]string {
+					return map[string]string{
+						"X-Github-Event": "issue_comment",
 					}
 				})
 

@@ -64,7 +64,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			requestJSON = NewStringMemoizer(func() string {
 				return ""
 			})
-			headers = NewStringMapMemoizer(func() map[string][]string {
+			headers = NewStringMapMemoizer(func() map[string]string {
 				return nil // nil is safe to read from, unsafe to write to
 			})
 
@@ -104,10 +104,8 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			sig := hex.EncodeToString(mac.Sum(nil))
 			(*request).Header.Add("X-Hub-Signature", "sha1="+sig)
 
-			for key, vals := range headers.Get() {
-				for _, val := range vals {
-					(*request).Header.Set(key, val)
-				}
+			for key, val := range headers.Get() {
+				(*request).Header.Set(key, val)
 			}
 
 		})

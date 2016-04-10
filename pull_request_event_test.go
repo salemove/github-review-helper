@@ -30,9 +30,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			repositories = *context.Repositories
 		})
 
-		headers.Is(func() map[string][]string {
-			return map[string][]string{
-				"X-Github-Event": []string{"pull_request"},
+		headers.Is(func() map[string]string {
+			return map[string]string{
+				"X-Github-Event": "pull_request",
 			}
 		})
 
