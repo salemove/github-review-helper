@@ -32,8 +32,18 @@ func TestGithubReviewHelper(t *testing.T) {
 	RunSpecs(t, "GithubReviewHelper Suite")
 }
 
-type WebhookTest func(StringMemoizer, StringMapMemoizer, func(), **httptest.ResponseRecorder, **MockGit,
-	**MockPullRequests, **MockRepositories, **MockIssues)
+type WebhookTestContext struct {
+	RequestJSON      StringMemoizer
+	Headers          StringMapMemoizer
+	Handle           func()
+	ResponseRecorder **httptest.ResponseRecorder
+	Git              **MockGit
+	PullRequests     **MockPullRequests
+	Repositories     **MockRepositories
+	Issues           **MockIssues
+}
+
+type WebhookTest func(WebhookTestContext)
 
 var TestWebhookHandler = func(test WebhookTest) bool {
 	Describe("webhook handler", func() {
@@ -103,7 +113,16 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			response.WriteResponse(*responseRecorder)
 		}
 
-		test(requestJSON, headers, handle, responseRecorder, git, pullRequests, repositories, issues)
+		test(WebhookTestContext{
+			RequestJSON:      requestJSON,
+			Headers:          headers,
+			Handle:           handle,
+			ResponseRecorder: responseRecorder,
+			Git:              git,
+			PullRequests:     pullRequests,
+			Repositories:     repositories,
+			Issues:           issues,
+		})
 	})
 
 	// Return something, so that the function could be called in top level

@@ -13,19 +13,21 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = TestWebhookHandler(func(requestJSON StringMemoizer, headers StringMapMemoizer, handle func(),
-	_responseRecorder **httptest.ResponseRecorder, _git **MockGit, _pullRequests **MockPullRequests,
-	_repositories **MockRepositories, _issues **MockIssues) {
+var _ = TestWebhookHandler(func(context WebhookTestContext) {
 	Describe("+1 comment", func() {
 		var (
+			handle      = context.Handle
+			headers     = context.Headers
+			requestJSON = context.RequestJSON
+
 			responseRecorder *httptest.ResponseRecorder
 			pullRequests     *MockPullRequests
 			repositories     *MockRepositories
 		)
 		BeforeEach(func() {
-			responseRecorder = *_responseRecorder
-			pullRequests = *_pullRequests
-			repositories = *_repositories
+			responseRecorder = *context.ResponseRecorder
+			pullRequests = *context.PullRequests
+			repositories = *context.Repositories
 		})
 
 		var itMarksCommitPeerReviewed = func() {
