@@ -603,14 +603,17 @@ var _ = Describe("github-review-helper", func() {
 						})
 
 						It("reports success status to GitHub", func() {
-							repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.
+								On("CreateStatus", repositoryOwner, repositoryName, commitRevision,
+									mock.MatchedBy(func(status *github.RepoStatus) bool {
+										return *status.State == "success" && *status.Context == "review/squash"
+									}),
+								).
+								Return(nil, nil, nil)
 
 							handle()
 
 							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-							status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
-							Expect(*status.State).To(Equal("success"))
-							Expect(*status.Context).To(Equal("review/squash"))
 						})
 					})
 
@@ -653,14 +656,17 @@ var _ = Describe("github-review-helper", func() {
 						})
 
 						It("reports pending squash status to GitHub", func() {
-							repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.
+								On("CreateStatus", repositoryOwner, repositoryName, commitRevision,
+									mock.MatchedBy(func(status *github.RepoStatus) bool {
+										return *status.State == "pending" && *status.Context == "review/squash"
+									}),
+								).
+								Return(nil, nil, nil)
 
 							handle()
 
 							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-							status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
-							Expect(*status.State).To(Equal("pending"))
-							Expect(*status.Context).To(Equal("review/squash"))
 						})
 					})
 				})

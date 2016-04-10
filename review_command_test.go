@@ -57,15 +57,16 @@ var _ = TestWebhookHandler(func(requestJSON StringMemoizer, headers StringMapMem
 
 				It("reports the status", func() {
 					repositories.
-						On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).
+						On("CreateStatus", repositoryOwner, repositoryName, commitRevision,
+							mock.MatchedBy(func(status *github.RepoStatus) bool {
+								return *status.State == "success" && *status.Context == "review/peer"
+							}),
+						).
 						Return(nil, nil, nil)
 
 					handle()
 
 					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-					status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
-					Expect(*status.State).To(Equal("success"))
-					Expect(*status.Context).To(Equal("review/peer"))
 				})
 			})
 		}
