@@ -18,6 +18,23 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const (
+	repositoryOwner = "salemove"
+	repositoryName  = "github-review-helper"
+	sshURL          = "git@github.com:salemove/github-review-helper.git"
+	issueNumber     = 7
+)
+
+var (
+	repository = &github.Repository{
+		Owner: &github.User{
+			Login: github.String(repositoryOwner),
+		},
+		Name:   github.String(repositoryName),
+		SSHURL: github.String(sshURL),
+	}
+)
+
 var _ = Describe("github-review-helper", func() {
 	Describe("/ handler", func() {
 		var (
@@ -31,12 +48,14 @@ var _ = Describe("github-review-helper", func() {
 			git          *MockGit
 			pullRequests *MockPullRequests
 			repositories *MockRepositories
+			issues       *MockIssues
 		)
 
 		BeforeEach(func() {
 			git = new(MockGit)
 			pullRequests = new(MockPullRequests)
 			repositories = new(MockRepositories)
+			issues = new(MockIssues)
 			headers = make(map[string][]string)
 			conf = Config{
 				Secret: "a-secret",
@@ -45,8 +64,15 @@ var _ = Describe("github-review-helper", func() {
 			responseRecorder = httptest.NewRecorder()
 		})
 
+		AfterEach(func() {
+			git.AssertExpectations(GinkgoT())
+			pullRequests.AssertExpectations(GinkgoT())
+			repositories.AssertExpectations(GinkgoT())
+			issues.AssertExpectations(GinkgoT())
+		})
+
 		JustBeforeEach(func() {
-			handler := CreateHandler(conf, git, pullRequests, repositories)
+			handler := CreateHandler(conf, git, pullRequests, repositories, issues)
 
 			data := []byte(requestJSON)
 			request, err := http.NewRequest("GET", "http://localhost/whatever", bytes.NewBuffer(data))
@@ -107,6 +133,27 @@ var _ = Describe("github-review-helper", func() {
 			})
 		})
 
+		var issueCommentEvent = func(comment string) string {
+			return `{
+  "issue": {
+    "number": ` + strconv.Itoa(issueNumber) + `,
+    "pull_request": {
+      "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
+    }
+  },
+  "comment": {
+    "body": "` + comment + `"
+  },
+  "repository": {
+    "name": "` + repositoryName + `",
+    "owner": {
+      "login": "` + repositoryOwner + `"
+    },
+    "ssh_url": "` + sshURL + `"
+  }
+}`
+		}
+
 		Context("with a valid signature", func() {
 			var mockSignature func()
 
@@ -126,24 +173,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Context("with an arbitrary comment", func() {
 					BeforeEach(func() {
-						requestJSON = `{
-  "issue": {
-    "number": 7,
-    "pull_request": {
-      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-    }
-  },
-  "comment": {
-    "body": "just a simple comment"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						requestJSON = issueCommentEvent("just a simple comment")
 						mockSignature()
 					})
 
@@ -154,32 +184,64 @@ var _ = Describe("github-review-helper", func() {
 					})
 				})
 
-				Context("with a !squash comment", func() {
+				itSquashesPR := func(pr *github.PullRequest) {
+					var (
+						repo *MockRepo
+
+						baseRef = *pr.Base.Ref
+						headRef = *pr.Head.Ref
+						headSHA = *pr.Head.SHA
+					)
+
 					BeforeEach(func() {
-						requestJSON = `{
-  "issue": {
-    "number": 7,
-    "pull_request": {
-      "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-    }
-  },
-  "comment": {
-    "body": "!squash"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						repo = new(MockRepo)
+						git.On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).Return(repo, nil)
+					})
+
+					AfterEach(func() {
+						repo.AssertExpectations(GinkgoT())
+					})
+
+					Context("with autosquash failing", func() {
+						BeforeEach(func() {
+							repo.On("RebaseAutosquash", baseRef, headSHA).Return(errors.New("merge conflict"))
+						})
+
+						It("reports the failure", func() {
+							repositories.
+								On("CreateStatus", repositoryOwner, repositoryName, headSHA, mock.MatchedBy(func(status *github.RepoStatus) bool {
+									return *status.State == "failure" && *status.Context == "review/squash"
+								})).
+								Return(nil, nil, nil)
+
+							handle()
+
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						})
+					})
+
+					Context("with autosquash succeeding", func() {
+						BeforeEach(func() {
+							repo.On("RebaseAutosquash", baseRef, headSHA).Return(nil)
+						})
+
+						It("pushes the squashed changes, reports status", func() {
+							repo.On("ForcePushHeadTo", headRef).Return(nil)
+
+							handle()
+						})
+					})
+				}
+
+				Describe("!squash comment", func() {
+					BeforeEach(func() {
+						requestJSON = issueCommentEvent("!squash")
 						mockSignature()
 					})
 
 					Context("with GitHub request failing", func() {
 						BeforeEach(func() {
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(nil, nil, errors.New("an error"))
+							pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(nil, nil, errors.New("an error"))
 						})
 
 						It("fails with a gateway error", func() {
@@ -189,61 +251,307 @@ var _ = Describe("github-review-helper", func() {
 					})
 
 					Context("with GitHub request succeeding", func() {
-						var repo *MockRepo
+						pr := &github.PullRequest{
+							Base: &github.PullRequestBranch{
+								SHA:  github.String("1234"),
+								Ref:  github.String("master"),
+								Repo: repository,
+							},
+							Head: &github.PullRequestBranch{
+								SHA:  github.String("1235"),
+								Ref:  github.String("feature"),
+								Repo: repository,
+							},
+						}
 
 						BeforeEach(func() {
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(pr, nil, nil)
+						})
+
+						itSquashesPR(pr)
+					})
+				})
+
+				Describe("!merge comment", func() {
+					BeforeEach(func() {
+						requestJSON = issueCommentEvent("!merge")
+						mockSignature()
+					})
+
+					Context("with github request to add the label failing", func() {
+						BeforeEach(func() {
+							issues.
+								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{MergingLabel}).
+								Return(nil, nil, errors.New("an error"))
+						})
+
+						It("fails with a gateway error", func() {
+							handle()
+							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+						})
+					})
+
+					Context("with github request to add the label succeeding", func() {
+						BeforeEach(func() {
+							issues.
+								On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{MergingLabel}).
+								Return(nil, nil, nil)
+						})
+
+						Context("with fetching the PR failing", func() {
+							BeforeEach(func() {
+								pullRequests.
+									On("Get", repositoryOwner, repositoryName, issueNumber).
+									Return(nil, nil, errors.New("an error"))
+							})
+
+							It("fails with a gateway error", func() {
+								handle()
+								Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+							})
+						})
+
+						Context("with the PR being already merged", func() {
+							BeforeEach(func() {
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
+									Merged: github.Bool(true),
+								}, nil, nil)
+							})
+
+							It("removes the 'merging' label from the PR", func() {
+								issues.
+									On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+									Return(nil, nil, nil)
+
+								handle()
+								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							})
+						})
+
+						Context("with the PR not being mergeable", func() {
+							BeforeEach(func() {
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
+									Merged:    github.Bool(false),
+									Mergeable: github.Bool(false),
+								}, nil, nil)
+							})
+
+							It("succeeds", func() {
+								handle()
+								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							})
+						})
+
+						Context("with the PR being mergeable", func() {
+							headSHA := "1235"
+							pr := &github.PullRequest{
+								Merged:    github.Bool(false),
+								Mergeable: github.Bool(true),
 								Base: &github.PullRequestBranch{
-									SHA: github.String("1234"),
-									Ref: github.String("master"),
+									SHA:  github.String("1234"),
+									Ref:  github.String("master"),
+									Repo: repository,
 								},
 								Head: &github.PullRequestBranch{
-									SHA: github.String("1235"),
-									Ref: github.String("feature"),
+									SHA:  github.String(headSHA),
+									Ref:  github.String("feature"),
+									Repo: repository,
 								},
-							}, nil, nil)
-							repo = new(MockRepo)
-							git.On("GetUpdatedRepo", "git@github.com:salemove/github-review-helper.git", "salemove", "github-review-helper").Return(repo, nil)
-						})
+							}
 
-						Context("with autosquash failing", func() {
 							BeforeEach(func() {
-								repo.On("RebaseAutosquash", "1234", "1235").Return(errors.New("merge conflict"))
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(pr, nil, nil)
 							})
 
-							It("reports the failure", func() {
-								repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							Context("with combined state being failing", func() {
+								BeforeEach(func() {
+									repositories.
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
+										Return(&github.CombinedStatus{
+											State: github.String("failing"),
+										}, &github.Response{}, nil)
+								})
 
-								handle()
-
-								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-								status := repositories.Calls[0].Arguments.Get(3).(*github.RepoStatus)
-								Expect(*status.State).To(Equal("failure"))
-								Expect(*status.Context).To(Equal("review/squash"))
-							})
-						})
-
-						Context("with autosquash succeeding", func() {
-							BeforeEach(func() {
-								repo.On("RebaseAutosquash", "1234", "1235").Return(nil)
+								It("succeeds", func() {
+									handle()
+									Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+								})
 							})
 
-							It("pushes the squashed changes, reports status", func() {
-								repo.On("ForcePushHeadTo", "feature").Return(nil)
+							Context("with a pending squash status in paged combined status request", func() {
+								BeforeEach(func() {
+									repositories.
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
+											Page:    1,
+											PerPage: 100,
+										}).
+										Return(&github.CombinedStatus{
+											State: github.String("pending"),
+											Statuses: []github.RepoStatus{
+												github.RepoStatus{
+													Context: github.String("jenkins/pr"),
+													State:   github.String("success"),
+												},
+											},
+										}, &github.Response{
+											NextPage: 2,
+										}, nil)
+									repositories.
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
+											Page:    2,
+											PerPage: 100,
+										}).
+										Return(&github.CombinedStatus{
+											State: github.String("pending"),
+											Statuses: []github.RepoStatus{
+												github.RepoStatus{
+													Context: github.String("review/squash"),
+													State:   github.String("pending"),
+												},
+											},
+										}, &github.Response{}, nil)
+								})
 
-								handle()
+								itSquashesPR(pr)
+							})
 
-								repo.AssertExpectations(GinkgoT())
+							Context("with combined state being success", func() {
+								BeforeEach(func() {
+									repositories.
+										On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
+										Return(&github.CombinedStatus{
+											State: github.String("success"),
+										}, &github.Response{}, nil)
+								})
+
+								Context("with merge failing with an unknown error", func() {
+									BeforeEach(func() {
+										additionalCommitMessage := ""
+										pullRequests.
+											On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+											Return(nil, nil, errors.New("an error")).
+											Once()
+									})
+
+									It("fails with a gateway error", func() {
+										handle()
+										Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+									})
+								})
+
+								Context("with head branch having changed", func() {
+									mockMergeFailWithConflict := func() *mock.Call {
+										additionalCommitMessage := ""
+										resp := &http.Response{
+											StatusCode: http.StatusConflict,
+										}
+										return pullRequests.
+											On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+											Return(nil, &github.Response{
+												Response: resp,
+											}, &github.ErrorResponse{
+												Response: resp,
+												Message:  "Head branch was modified. Review and try the merge again.",
+											})
+									}
+
+									Context("every time", func() {
+										BeforeEach(func() {
+											mockMergeFailWithConflict()
+										})
+
+										It("retries and fails with a gateway error", func() {
+											handle()
+
+											// +1 because of the initial attempt
+											pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", MergeRetryLimit+1)
+											pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", MergeRetryLimit+1)
+											Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+										})
+									})
+
+									Context("with merge succeeding with first retry", func() {
+										BeforeEach(func() {
+											mockMergeFailWithConflict().Once()
+
+											additionalCommitMessage := ""
+											pullRequests.
+												On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+												Return(&github.PullRequestMergeResult{
+													Merged: github.Bool(true),
+												}, nil, nil).
+												Once()
+										})
+
+										It("removes the 'merging' label from the PR after the merge", func() {
+											issues.
+												On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+												Return(nil, nil, nil)
+
+											handle()
+											pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", 2)
+											pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", 2)
+											Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+										})
+									})
+								})
+
+								Context("with merge failing, because PR not mergeable", func() {
+									BeforeEach(func() {
+										additionalCommitMessage := ""
+										resp := &http.Response{
+											StatusCode: http.StatusMethodNotAllowed,
+										}
+										pullRequests.
+											On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+											Return(nil, &github.Response{
+												Response: resp,
+											}, &github.ErrorResponse{
+												Response: resp,
+												Message:  "Pull Request is not mergeable",
+											}).
+											Once()
+									})
+
+									It("fails with a gateway error", func() {
+										handle()
+										Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+									})
+								})
+
+								Context("with merge succeeding", func() {
+									BeforeEach(func() {
+										additionalCommitMessage := ""
+										pullRequests.
+											On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+											Return(&github.PullRequestMergeResult{
+												Merged: github.Bool(true),
+											}, nil, nil).
+											Once()
+									})
+
+									It("removes the 'merging' label from the PR after the merge", func() {
+										issues.
+											On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, MergingLabel).
+											Return(nil, nil, nil)
+
+										handle()
+										Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+									})
+								})
 							})
 						})
 					})
 				})
 
-				Context("with a +1 comment", func() {
+				Describe("+1 comment", func() {
+					var commitRevision = "1235"
 					var itMarksCommitPeerReviewed = func() {
 						Context("with GitHub request failing", func() {
 							BeforeEach(func() {
-								pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(nil, nil, errors.New("an error"))
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(nil, nil, errors.New("an error"))
 							})
 
 							It("fails with a gateway error", func() {
@@ -254,16 +562,16 @@ var _ = Describe("github-review-helper", func() {
 
 						Context("with GitHub request succeeding", func() {
 							BeforeEach(func() {
-								pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
+								pullRequests.On("Get", repositoryOwner, repositoryName, issueNumber).Return(&github.PullRequest{
 									Head: &github.PullRequestBranch{
-										SHA: github.String("1235"),
-										Ref: github.String("feature"),
+										SHA:  github.String(commitRevision),
+										Repo: repository,
 									},
 								}, nil, nil)
 							})
 
 							It("reports the status", func() {
-								repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+								repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 								handle()
 
@@ -277,24 +585,7 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with +1 at the beginning of the comment", func() {
 						BeforeEach(func() {
-							requestJSON = `{
-	  "issue": {
-		"number": 7,
-		"pull_request": {
-		  "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-		}
-	  },
-	  "comment": {
-		"body": "+1, awesome job!"
-	  },
-	  "repository": {
-		"name": "github-review-helper",
-		"owner": {
-		  "login": "salemove"
-		},
-		"ssh_url": "git@github.com:salemove/github-review-helper.git"
-	  }
-	}`
+							requestJSON = issueCommentEvent("+1, awesome job!")
 							mockSignature()
 						})
 
@@ -303,24 +594,7 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with +1 at the end of the comment", func() {
 						BeforeEach(func() {
-							requestJSON = `{
-	  "issue": {
-		"number": 7,
-		"pull_request": {
-		  "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-		}
-	  },
-	  "comment": {
-		"body": "Looking good! +1"
-	  },
-	  "repository": {
-		"name": "github-review-helper",
-		"owner": {
-		  "login": "salemove"
-		},
-		"ssh_url": "git@github.com:salemove/github-review-helper.git"
-	  }
-	}`
+							requestJSON = issueCommentEvent("Looking good! +1")
 							mockSignature()
 						})
 
@@ -329,6 +603,23 @@ var _ = Describe("github-review-helper", func() {
 				})
 			})
 
+			var pullRequestsEvent = func(action string) string {
+				return `{
+  "action": "` + action + `",
+  "number": ` + strconv.Itoa(issueNumber) + `,
+  "pull_request": {
+    "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
+  },
+  "repository": {
+    "name": "` + repositoryName + `",
+    "owner": {
+      "login": "` + repositoryOwner + `"
+    },
+    "ssh_url": "` + sshURL + `"
+  }
+}`
+			}
+
 			Describe("pull_request event", func() {
 				BeforeEach(func() {
 					headers["X-Github-Event"] = []string{"pull_request"}
@@ -336,23 +627,7 @@ var _ = Describe("github-review-helper", func() {
 
 				Context("with the PR being closed", func() {
 					BeforeEach(func() {
-						requestJSON = `{
-  "action": "closed",
-  "number": 7,
-  "pull_request": {
-    "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-  },
-  "comment": {
-    "body": "just a simple comment"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						requestJSON = pullRequestsEvent("closed")
 						mockSignature()
 					})
 
@@ -364,31 +639,18 @@ var _ = Describe("github-review-helper", func() {
 				})
 
 				Context("with the PR being synchronized", func() {
+					var commitRevision = "1235"
+
 					BeforeEach(func() {
-						requestJSON = `{
-  "action": "synchronize",
-  "number": 7,
-  "pull_request": {
-    "url": "https://api.github.com/repos/salemove/github-review-helper/pulls/7"
-  },
-  "comment": {
-    "body": "just a simple comment"
-  },
-  "repository": {
-    "name": "github-review-helper",
-    "owner": {
-      "login": "salemove"
-    },
-    "ssh_url": "git@github.com:salemove/github-review-helper.git"
-  }
-}`
+						requestJSON = pullRequestsEvent("synchronize")
 						mockSignature()
 					})
 
 					Context("with GitHub request to list commits failing", func() {
 						BeforeEach(func() {
-							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return(nil, nil, errors.New("an error"))
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+								Return(nil, nil, errors.New("an error"))
 						})
 
 						It("fails with a gateway error", func() {
@@ -399,28 +661,32 @@ var _ = Describe("github-review-helper", func() {
 
 					Context("with list of commits from GitHub NOT including fixup commits", func() {
 						BeforeEach(func() {
-							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return([]github.RepositoryCommit{
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("Changing things"),
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+								Return([]github.RepositoryCommit{
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("Changing things"),
+										},
 									},
-								},
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("Another casual commit"),
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("Another casual commit"),
+										},
 									},
-								},
-							}, nil, nil)
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
-								Head: &github.PullRequestBranch{
-									SHA: github.String("1235"),
-								},
-							}, nil, nil)
+								}, &github.Response{}, nil)
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(&github.PullRequest{
+									Head: &github.PullRequestBranch{
+										SHA:  github.String(commitRevision),
+										Repo: repository,
+									},
+								}, nil, nil)
 						})
 
 						It("reports success status to GitHub", func() {
-							repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 							handle()
 
@@ -431,30 +697,46 @@ var _ = Describe("github-review-helper", func() {
 						})
 					})
 
-					Context("with list of commits from GitHub including fixup commits", func() {
+					Context("with paged list of commits from GitHub including fixup commits", func() {
 						BeforeEach(func() {
-							var listOptions *github.ListOptions
-							pullRequests.On("ListCommits", "salemove", "github-review-helper", 7, listOptions).Return([]github.RepositoryCommit{
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("Changing things"),
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+									Page:    1,
+									PerPage: 30,
+								}).
+								Return([]github.RepositoryCommit{
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("Changing things"),
+										},
 									},
-								},
-								github.RepositoryCommit{
-									Commit: &github.Commit{
-										Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
+								}, &github.Response{
+									NextPage: 2,
+								}, nil)
+							pullRequests.
+								On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+									Page:    2,
+									PerPage: 30,
+								}).
+								Return([]github.RepositoryCommit{
+									github.RepositoryCommit{
+										Commit: &github.Commit{
+											Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
+										},
 									},
-								},
-							}, nil, nil)
-							pullRequests.On("Get", "salemove", "github-review-helper", 7).Return(&github.PullRequest{
-								Head: &github.PullRequestBranch{
-									SHA: github.String("1235"),
-								},
-							}, nil, nil)
+								}, &github.Response{}, nil)
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(&github.PullRequest{
+									Head: &github.PullRequestBranch{
+										SHA:  github.String(commitRevision),
+										Repo: repository,
+									},
+								}, nil, nil)
 						})
 
 						It("reports pending squash status to GitHub", func() {
-							repositories.On("CreateStatus", "salemove", "github-review-helper", "1235", mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
+							repositories.On("CreateStatus", repositoryOwner, repositoryName, commitRevision, mock.AnythingOfType("*github.RepoStatus")).Return(nil, nil, nil)
 
 							handle()
 

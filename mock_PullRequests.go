@@ -68,3 +68,33 @@ func (_m *MockPullRequests) ListCommits(owner string, repo string, number int, o
 
 	return r0, r1, r2
 }
+func (_m *MockPullRequests) Merge(owner string, repo string, number int, commitMessage string) (*github.PullRequestMergeResult, *github.Response, error) {
+	ret := _m.Called(owner, repo, number, commitMessage)
+
+	var r0 *github.PullRequestMergeResult
+	if rf, ok := ret.Get(0).(func(string, string, int, string) *github.PullRequestMergeResult); ok {
+		r0 = rf(owner, repo, number, commitMessage)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*github.PullRequestMergeResult)
+		}
+	}
+
+	var r1 *github.Response
+	if rf, ok := ret.Get(1).(func(string, string, int, string) *github.Response); ok {
+		r1 = rf(owner, repo, number, commitMessage)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*github.Response)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(string, string, int, string) error); ok {
+		r2 = rf(owner, repo, number, commitMessage)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}

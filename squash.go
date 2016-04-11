@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/google/go-github/github"
 )
+
+var RebaseError = errors.New("Rebase failed")
 
 func isSquashCommand(comment string) bool {
 	return strings.TrimSpace(comment) == "!squash"
@@ -17,29 +20,10 @@ func handleSquashCommand(issueComment IssueComment, git Git, pullRequests PullRe
 	if errResp != nil {
 		return errResp
 	}
-	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
-	repo, err := git.GetUpdatedRepo(issueComment.Repository.URL, issueComment.Repository.Owner, issueComment.Repository.Name)
-	if err != nil {
-		return ErrorResponse{err, http.StatusInternalServerError, "Failed to update the local repo"}
-	}
-	if err = repo.RebaseAutosquash(*pr.Base.SHA, *pr.Head.SHA); err != nil {
-		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
-		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
-		if errResp := setStatus(issueComment.Repository, *pr.Head.SHA, status, repositories); errResp != nil {
-			return errResp
-		}
-		return SuccessResponse{"Failed to autosquash the commits with an interactive rebase. Reported the failure."}
-	}
-	if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
-		return ErrorResponse{err, http.StatusInternalServerError, "Failed to push the squashed version"}
-	}
-	return SuccessResponse{}
+	return squashAndReportFailure(pr, git, repositories)
 }
 
 func checkForFixupCommits(pullRequestEvent PullRequestEvent, pullRequests PullRequests, repositories Repositories) Response {
-	if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
-		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
-	}
 	log.Printf("Checking for fixup commits for PR %s.\n", pullRequestEvent.Issue().FullName())
 	commits, errResp := getCommits(pullRequestEvent, pullRequests)
 	if errResp != nil {
@@ -74,4 +58,35 @@ func createSquashStatus(state, description string) *github.RepoStatus {
 		Description: github.String(description),
 		Context:     github.String(githubStatusSquashContext),
 	}
+}
+
+func squashAndReportFailure(pr *github.PullRequest, git Git, repositories Repositories) Response {
+	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
+	err := squash(pr, git, repositories)
+	if err == RebaseError {
+		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
+		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
+		if errResp := setStatus(pr, status, repositories); errResp != nil {
+			return errResp
+		}
+		return SuccessResponse{}
+	} else if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to squash the commits in the PR"}
+	}
+	return SuccessResponse{}
+}
+
+func squash(pr *github.PullRequest, git Git, repositories Repositories) error {
+	headRepository := internalRepositoryRepresentation(pr.Head.Repo)
+	repo, err := git.GetUpdatedRepo(headRepository.URL, headRepository.Owner, headRepository.Name)
+	if err != nil {
+		return errors.New("Failed to update the local repo")
+	}
+	if err = repo.RebaseAutosquash(*pr.Base.Ref, *pr.Head.SHA); err != nil {
+		return RebaseError
+	}
+	if err = repo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
+		return errors.New("Failed to push the squashed version")
+	}
+	return nil
 }
