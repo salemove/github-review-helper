@@ -107,7 +107,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 	Context("with autosquash failing", func() {
 		BeforeEach(func() {
 			gitRepo.
-				On("RebaseAutosquash", baseRef, headSHA).
+				On("RebaseAutosquash", "origin/"+baseRef, headSHA).
 				Return(errors.New("merge conflict"))
 		})
 
@@ -127,7 +127,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 	Context("with autosquash succeeding", func() {
 		BeforeEach(func() {
 			gitRepo.
-				On("RebaseAutosquash", baseRef, headSHA).
+				On("RebaseAutosquash", "origin/"+baseRef, headSHA).
 				Return(nil)
 		})
 
