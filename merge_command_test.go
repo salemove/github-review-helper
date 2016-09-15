@@ -15,6 +15,8 @@ import (
 )
 
 var _ = TestWebhookHandler(func(context WebhookTestContext) {
+	noSquashOpts := &github.PullRequestOptions{Squash: false}
+
 	Describe("!merge comment", func() {
 		var (
 			handle      = context.Handle
@@ -198,7 +200,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						BeforeEach(func() {
 							additionalCommitMessage := ""
 							pullRequests.
-								On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+								On(
+									"Merge",
+									repositoryOwner,
+									repositoryName,
+									issueNumber,
+									additionalCommitMessage,
+									noSquashOpts,
+								).
 								Return(nil, nil, errors.New("an error")).
 								Once()
 						})
@@ -216,7 +225,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								StatusCode: http.StatusConflict,
 							}
 							return pullRequests.
-								On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+								On(
+									"Merge",
+									repositoryOwner,
+									repositoryName,
+									issueNumber,
+									additionalCommitMessage,
+									noSquashOpts,
+								).
 								Return(nil, &github.Response{
 									Response: resp,
 								}, &github.ErrorResponse{
@@ -246,7 +262,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 								additionalCommitMessage := ""
 								pullRequests.
-									On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+									On(
+										"Merge",
+										repositoryOwner,
+										repositoryName,
+										issueNumber,
+										additionalCommitMessage,
+										noSquashOpts,
+									).
 									Return(&github.PullRequestMergeResult{
 										Merged: github.Bool(true),
 									}, nil, nil).
@@ -273,7 +296,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								StatusCode: http.StatusMethodNotAllowed,
 							}
 							pullRequests.
-								On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+								On(
+									"Merge",
+									repositoryOwner,
+									repositoryName,
+									issueNumber,
+									additionalCommitMessage,
+									noSquashOpts,
+								).
 								Return(nil, &github.Response{
 									Response: resp,
 								}, &github.ErrorResponse{
@@ -293,7 +323,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						BeforeEach(func() {
 							additionalCommitMessage := ""
 							pullRequests.
-								On("Merge", repositoryOwner, repositoryName, issueNumber, additionalCommitMessage).
+								On(
+									"Merge",
+									repositoryOwner,
+									repositoryName,
+									issueNumber,
+									additionalCommitMessage,
+									noSquashOpts,
+								).
 								Return(&github.PullRequestMergeResult{
 									Merged: github.Bool(true),
 								}, nil, nil).

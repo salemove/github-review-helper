@@ -72,13 +72,13 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				BeforeEach(func() {
 					pullRequests.
 						On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return([]github.RepositoryCommit{
-							github.RepositoryCommit{
+						Return([]*github.RepositoryCommit{
+							&github.RepositoryCommit{
 								Commit: &github.Commit{
 									Message: github.String("Changing things"),
 								},
 							},
-							github.RepositoryCommit{
+							&github.RepositoryCommit{
 								Commit: &github.Commit{
 									Message: github.String("Another casual commit"),
 								},
@@ -116,8 +116,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Page:    1,
 							PerPage: 30,
 						}).
-						Return([]github.RepositoryCommit{
-							github.RepositoryCommit{
+						Return([]*github.RepositoryCommit{
+							&github.RepositoryCommit{
 								Commit: &github.Commit{
 									Message: github.String("Changing things"),
 								},
@@ -130,8 +130,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Page:    2,
 							PerPage: 30,
 						}).
-						Return([]github.RepositoryCommit{
-							github.RepositoryCommit{
+						Return([]*github.RepositoryCommit{
+							&github.RepositoryCommit{
 								Commit: &github.Commit{
 									Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
 								},

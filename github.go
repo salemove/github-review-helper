@@ -13,8 +13,8 @@ var ErrOutdatedMergeRef = errors.New("Merge failed because head branch has been 
 
 type PullRequests interface {
 	Get(owner, repo string, number int) (*github.PullRequest, *github.Response, error)
-	ListCommits(owner, repo string, number int, opt *github.ListOptions) ([]github.RepositoryCommit, *github.Response, error)
-	Merge(owner, repo string, number int, commitMessage string) (*github.PullRequestMergeResult, *github.Response, error)
+	ListCommits(owner, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
+	Merge(owner, repo string, number int, commitMessage string, opt *github.PullRequestOptions) (*github.PullRequestMergeResult, *github.Response, error)
 }
 
 type Repositories interface {
@@ -23,7 +23,7 @@ type Repositories interface {
 }
 
 type Issues interface {
-	AddLabelsToIssue(owner, repo string, number int, labels []string) ([]github.Label, *github.Response, error)
+	AddLabelsToIssue(owner, repo string, number int, labels []string) ([]*github.Label, *github.Response, error)
 	RemoveLabelForIssue(owner, repo string, number int, label string) (*github.Response, error)
 }
 
@@ -90,10 +90,10 @@ func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest,
 	return pr, nil
 }
 
-func getCommits(issueable Issueable, pullRequests PullRequests) ([]github.RepositoryCommit, *ErrorResponse) {
+func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.RepositoryCommit, *ErrorResponse) {
 	issue := issueable.Issue()
 	pageNr := 1
-	commits := []github.RepositoryCommit{}
+	commits := []*github.RepositoryCommit{}
 	for {
 		listOptions := &github.ListOptions{
 			Page:    pageNr,
@@ -133,7 +133,8 @@ func removeLabel(repository Repository, issueNumber int, label string, issues Is
 
 func merge(repository Repository, issueNumber int, pullRequests PullRequests) error {
 	additionalCommitMessage := ""
-	result, resp, err := pullRequests.Merge(repository.Owner, repository.Name, issueNumber, additionalCommitMessage)
+	opt := &github.PullRequestOptions{Squash: false}
+	result, resp, err := pullRequests.Merge(repository.Owner, repository.Name, issueNumber, additionalCommitMessage, opt)
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusMethodNotAllowed {
 			return ErrNotMergeable

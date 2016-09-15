@@ -8,15 +8,15 @@ type Issues struct {
 	mock.Mock
 }
 
-func (_m *Issues) AddLabelsToIssue(owner string, repo string, number int, labels []string) ([]github.Label, *github.Response, error) {
+func (_m *Issues) AddLabelsToIssue(owner string, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
 	ret := _m.Called(owner, repo, number, labels)
 
-	var r0 []github.Label
-	if rf, ok := ret.Get(0).(func(string, string, int, []string) []github.Label); ok {
+	var r0 []*github.Label
+	if rf, ok := ret.Get(0).(func(string, string, int, []string) []*github.Label); ok {
 		r0 = rf(owner, repo, number, labels)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]github.Label)
+			r0 = ret.Get(0).([]*github.Label)
 		}
 	}
 
