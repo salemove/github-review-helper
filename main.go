@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"regexp"
 	"time"
 
 	"gopkg.in/tylerb/graceful.v1"
@@ -57,9 +56,6 @@ func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, r
 	}
 }
 
-// isPlusOneComment matches strings that contain either a +1 (not followed by other digits) or a :+1: emoji
-var isPlusOneComment = regexp.MustCompile(`\+1($|\D)`)
-
 func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories, issues Issues) Response {
 	issueComment, err := parseIssueComment(body)
 	if err != nil {
@@ -73,8 +69,6 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 		return handleSquashCommand(issueComment, gitRepos, pullRequests, repositories)
 	case isMergeCommand(issueComment.Comment):
 		return handleMergeCommand(issueComment, issues, pullRequests, repositories, gitRepos)
-	case isPlusOneComment.MatchString(issueComment.Comment):
-		return handlePlusOneComment(issueComment, pullRequests, repositories)
 	}
 	return SuccessResponse{"Not a command I understand. Ignoring."}
 }
