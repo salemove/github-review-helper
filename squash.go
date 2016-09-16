@@ -44,7 +44,7 @@ func checkForFixupCommits(pullRequestEvent PullRequestEvent, pullRequests PullRe
 	return SuccessResponse{}
 }
 
-func includesFixupCommits(commits []github.RepositoryCommit) bool {
+func includesFixupCommits(commits []*github.RepositoryCommit) bool {
 	for _, commit := range commits {
 		if strings.HasPrefix(*commit.Commit.Message, "fixup! ") || strings.HasPrefix(*commit.Commit.Message, "squash! ") {
 			return true
