@@ -1,7 +1,9 @@
 package git
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -50,7 +52,7 @@ func (g *repos) repo(path string) Repo {
 }
 
 func (g *repos) clone(url, localPath string) (Repo, error) {
-	if err := exec.Command("git", "clone", url, localPath).Run(); err != nil {
+	if err := runWithLogging("git", "clone", url, localPath); err != nil {
 		return nil, fmt.Errorf("failed to clone: %v", err)
 	}
 	return g.repo(localPath), nil
@@ -101,10 +103,10 @@ func (r *repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 	}
 	defer os.Unsetenv("GIT_SEQUENCE_EDITOR")
 
-	if err := exec.Command("git", "-C", r.path, "rebase", "--interactive", "--autosquash", upstreamRef, branchRef).Run(); err != nil {
+	if err := runWithLogging("git", "-C", r.path, "rebase", "--interactive", "--autosquash", upstreamRef, branchRef); err != nil {
 		err = fmt.Errorf("failed to rebase: %v", err)
 		log.Println(err, " Trying to clean up.")
-		if cleanupErr := exec.Command("git", "-C", r.path, "rebase", "--abort").Run(); cleanupErr != nil {
+		if cleanupErr := runWithLogging("git", "-C", r.path, "rebase", "--abort"); cleanupErr != nil {
 			log.Println("Also failed to clean up after the failed rebase: ", cleanupErr)
 		}
 		return err
@@ -116,7 +118,7 @@ func (r *repo) Fetch() error {
 	r.Lock()
 	defer r.Unlock()
 
-	if err := exec.Command("git", "-C", r.path, "fetch").Run(); err != nil {
+	if err := runWithLogging("git", "-C", r.path, "fetch"); err != nil {
 		return fmt.Errorf("failed to fetch: %v", err)
 	}
 	return nil
@@ -126,7 +128,7 @@ func (r *repo) ForcePushHeadTo(remoteRef string) error {
 	r.Lock()
 	defer r.Unlock()
 
-	if err := exec.Command("git", "-C", r.path, "push", "--force", "origin", "@:"+remoteRef).Run(); err != nil {
+	if err := runWithLogging("git", "-C", r.path, "push", "--force", "origin", "@:"+remoteRef); err != nil {
 		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil
@@ -142,4 +144,33 @@ func (r *repo) GetHeadSHA() (string, error) {
 	}
 	headSHA := strings.TrimSpace(string(output[:]))
 	return headSHA, nil
+}
+
+func runWithLogging(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(io.MultiReader(stdout, stderr))
+	for scanner.Scan() {
+		log.Printf("%s: %s\n", name, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("error reading %s's stdout/stderr: %s\n", name, err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return err
+	}
+	return nil
 }
