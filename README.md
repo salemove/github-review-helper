@@ -23,7 +23,23 @@ This step is nicely [covered in GitHub's own
 documentation](https://help.github.com/articles/creating-an-access-token-for-command-line-use/). Create a token
 following the guide and mark it down.
 
-### Install and start the bot
+### Run the bot from a docker image
+```
+docker run \
+  -e GITHUB_ACCESS_TOKEN="the-access-token-you-created-above" \
+  -e GITHUB_SECRET="a-secret" \
+  -v ~/.ssh:/etc/secret-volume \
+  -p 4567:80 \
+  salemove/github-review-helper
+```
+
+Note that the snippet above mounts your local `~/.ssh` folder as a volume into
+the Docker container. This is required for the bot to be able to connect to
+your repositories using git. It will use the `known_hosts` file from that
+mounted folder for making sure that your connection to github.com is secure and
+the `id_rsa` file for the SSH identity.
+
+### Install and start the bot (if you don't want to use docker)
 The following commands expect you to have Go installed and your *GOPATH* to be properly set up. To compile and install
 the bot, run the following commands:
 ```
@@ -32,7 +48,7 @@ cd $GOPATH/github.com/salemove/github-review-helper
 go install
 ```
 
-The bot requires some environment variables to be set for it to funcion. Let's quickly go over each one to see what it
+The bot requires some environment variables to be set for it to function. Let's quickly go over each one to see what it
 is and why it's needed.
 
  - `PORT`: The port the bot will be listening for connections on
@@ -51,6 +67,7 @@ go executables on your path):
 PS: *The bot also needs git to be available on path and it expects the user the command is run under to have ssh access
 to the repositories it is used for.*
 
+### Set up a tunnel
 Leave the bot running and let's now set up a tunnel to localhost.  This example depends on [ngrok](https://ngrok.com/)
 being installed and available on the system (as do the official [GitHub webhook
 docs](https://developer.github.com/webhooks/configuring/#using-ngrok)) to make the bot publicly accessible by GitHub. So
