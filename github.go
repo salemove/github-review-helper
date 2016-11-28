@@ -133,7 +133,7 @@ func removeLabel(repository Repository, issueNumber int, label string, issues Is
 
 func merge(repository Repository, issueNumber int, pullRequests PullRequests) error {
 	additionalCommitMessage := ""
-	opt := &github.PullRequestOptions{Squash: false}
+	opt := &github.PullRequestOptions{MergeMethod: "merge"}
 	result, resp, err := pullRequests.Merge(repository.Owner, repository.Name, issueNumber, additionalCommitMessage, opt)
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusMethodNotAllowed {
