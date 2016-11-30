@@ -15,7 +15,7 @@ import (
 )
 
 var _ = TestWebhookHandler(func(context WebhookTestContext) {
-	noSquashOpts := &github.PullRequestOptions{Squash: false}
+	noSquashOpts := &github.PullRequestOptions{MergeMethod: "merge"}
 
 	Describe("!merge comment", func() {
 		var (
