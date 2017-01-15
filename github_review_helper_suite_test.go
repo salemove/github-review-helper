@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -178,6 +179,36 @@ var PullRequestEvent = func(action, headSHA string, headRepository grh.Repositor
       }
     }
   },
+  "repository": {
+    "name": "` + repositoryName + `",
+    "owner": {
+      "login": "` + repositoryOwner + `"
+    },
+    "ssh_url": "` + sshURL + `"
+  }
+}`
+}
+
+var createStatusEvent = func(sha, state string, branches []grh.Branch) string {
+	branchSHAs := make([]string, len(branches))
+	for i, branch := range branches {
+		branchSHAs[i] = branch.SHA
+	}
+	return `{
+  "sha": "` + sha + `",
+  "state": "` + state + `",
+  "branches": [
+    {
+      "commit": {
+        "sha": "` + strings.Join(branchSHAs, `"
+      }
+    },
+    {
+      "commit": {
+        "sha": "`) + `"
+      }
+    }
+  ],
   "repository": {
     "name": "` + repositoryName + `",
     "owner": {

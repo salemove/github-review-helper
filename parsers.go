@@ -73,3 +73,38 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 		},
 	}, nil
 }
+
+func parseStatusEvent(body []byte) (StatusEvent, error) {
+	var message struct {
+		SHA      string `json:"sha"`
+		State    string `json:"state"`
+		Branches []struct {
+			Commit struct {
+				SHA string `json:"sha"`
+			} `json:"commit"`
+		} `json:"branches"`
+		Repository messageRepository `json:"repository"`
+	}
+
+	err := json.Unmarshal(body, &message)
+	if err != nil {
+		return StatusEvent{}, err
+	}
+
+	branches := make([]Branch, len(message.Branches))
+	for i, branch := range message.Branches {
+		branches[i] = Branch{
+			SHA: branch.Commit.SHA,
+		}
+	}
+	return StatusEvent{
+		SHA:      message.SHA,
+		State:    message.State,
+		Branches: branches,
+		Repository: Repository{
+			Owner: message.Repository.Owner.Login,
+			Name:  message.Repository.Name,
+			URL:   message.Repository.SSHURL,
+		},
+	}, nil
+}

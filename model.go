@@ -29,6 +29,13 @@ type (
 		Repository  Repository
 	}
 
+	StatusEvent struct {
+		SHA        string
+		State      string
+		Branches   []Branch
+		Repository Repository
+	}
+
 	Repository struct {
 		Owner string
 		Name  string
@@ -38,6 +45,10 @@ type (
 	PullRequestBranch struct {
 		SHA        string
 		Repository Repository
+	}
+
+	Branch struct {
+		SHA string // The SHA of the head commit of the branch
 	}
 )
 

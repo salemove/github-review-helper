@@ -19,6 +19,16 @@ func isMergeCommand(comment string) bool {
 	return strings.TrimSpace(comment) == "!merge"
 }
 
+func newPullRequestsPossiblyReadyForMerging(statusEvent StatusEvent) bool {
+	// We only care about success events, because only these events have the
+	// possibility of changing a PR's combined status into "success" and so
+	// enabling us to merge the PR.
+	// In a similar manner we also only care about status updates to commits
+	// that are the head commit of a branch, because only they have the ability
+	// to change a PR's combined status.
+	return statusEvent.State == "success" && isStatusForBranchHead(statusEvent)
+}
+
 func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests PullRequests,
 	repositories Repositories, gitRepos git.Repos) Response {
 	errResp := addLabel(issueComment.Repository, issueComment.IssueNumber, MergingLabel, issues)
@@ -70,6 +80,15 @@ func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, p
 func containsPendingSquashStatus(statuses []github.RepoStatus) bool {
 	for _, status := range statuses {
 		if *status.Context == githubStatusSquashContext && *status.State == "pending" {
+			return true
+		}
+	}
+	return false
+}
+
+func isStatusForBranchHead(statusEvent StatusEvent) bool {
+	for _, branch := range statusEvent.Branches {
+		if statusEvent.SHA == branch.SHA {
 			return true
 		}
 	}

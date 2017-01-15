@@ -51,6 +51,8 @@ func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, r
 			return handleIssueComment(body, gitRepos, pullRequests, repositories, issues)
 		case "pull_request":
 			return handlePullRequestEvent(body, pullRequests, repositories)
+		case "status":
+			return handleStatusEvent(body)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
 	}
@@ -83,6 +85,16 @@ func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
 	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories)
+}
+
+func handleStatusEvent(body []byte) Response {
+	statusEvent, err := parseStatusEvent(body)
+	if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
+	} else if newPullRequestsPossiblyReadyForMerging(statusEvent) {
+		return SuccessResponse{""}
+	}
+	return ErrorResponse{err, http.StatusInternalServerError, "XXX: Temporary error, to simplify testing"}
 }
 
 func initGithubClient(accessToken string) *github.Client {
