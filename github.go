@@ -9,6 +9,10 @@ import (
 	"github.com/google/go-github/github"
 )
 
+const (
+	GetCommitsRetryLimit = 3
+)
+
 var ErrNotMergeable = errors.New("PullRequests is not mergeable.")
 var ErrOutdatedMergeRef = errors.New("Merge failed because head branch has been modified.")
 
@@ -101,6 +105,7 @@ func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest,
 func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.RepositoryCommit, *ErrorResponse) {
 	issue := issueable.Issue()
 	pageNr := 1
+	nrOfRetriesLeft := GetCommitsRetryLimit
 	commits := []*github.RepositoryCommit{}
 	for {
 		listOptions := &github.ListOptions{
@@ -109,6 +114,11 @@ func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.Repos
 		}
 		pageCommits, resp, err := pullRequests.ListCommits(issue.Repository.Owner, issue.Repository.Name, issue.Number, listOptions)
 		if err != nil {
+			if errResp, ok := err.(*github.ErrorResponse); ok && errResp.Response.StatusCode == 404 && nrOfRetriesLeft > 0 {
+				log.Printf("Getting commits for PR %s failed with a 404: \"%s\". Trying again.\n", issue.FullName(), err.Error())
+				nrOfRetriesLeft = nrOfRetriesLeft - 1
+				continue
+			}
 			message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
 			return nil, &ErrorResponse{err, http.StatusBadGateway, message}
 		}
