@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/google/go-github/github"
@@ -32,6 +33,13 @@ func setPRHeadStatus(issueable Issueable, status *github.RepoStatus, pullRequest
 	if errResp != nil {
 		return errResp
 	}
+	log.Printf(
+		"Setting %s status to %s for PR %s (revision %s).\n",
+		*status.Context,
+		*status.State,
+		issueable.Issue().FullName(),
+		*pr.Head.SHA,
+	)
 	return setStatus(pr, status, repositories)
 }
 
