@@ -6,12 +6,22 @@ import (
 	"net/http/httptest"
 
 	"github.com/google/go-github/github"
+	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+var createGithubErrorResponse = func(statusCode int) *github.ErrorResponse {
+	return &github.ErrorResponse{
+		Response: &http.Response{
+			StatusCode: statusCode,
+			Request:    &http.Request{},
+		},
+	}
+}
 
 var _ = TestWebhookHandler(func(context WebhookTestContext) {
 	Describe("pull_request event", func() {
@@ -56,15 +66,41 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			})
 
 			Context("with GitHub request to list commits failing", func() {
-				BeforeEach(func() {
-					pullRequests.
-						On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return(nil, nil, errors.New("an error"))
+				Context("with a 404", func() {
+					BeforeEach(func() {
+						pullRequests.
+							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+							Return(nil, nil, createGithubErrorResponse(404))
+					})
+
+					It("fails with a gateway error", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					})
+
+					It("tries multiple times", func() {
+						handle()
+						// +1 because of the initial attempt
+						pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", grh.GetCommitsRetryLimit+1)
+					})
 				})
 
-				It("fails with a gateway error", func() {
-					handle()
-					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				Context("with a different error", func() {
+					BeforeEach(func() {
+						pullRequests.
+							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+							Return(nil, nil, errors.New("an error"))
+					})
+
+					It("fails with a gateway error", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					})
+
+					It("tries once", func() {
+						handle()
+						pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", 1)
+					})
 				})
 			})
 
