@@ -2,6 +2,14 @@ package main
 
 import "encoding/json"
 
+type messageRepository struct {
+	Name  string `json:"name"`
+	Owner struct {
+		Login string `json:"login"`
+	} `json:"owner"`
+	SSHURL string `json:"ssh_url"`
+}
+
 func parseIssueComment(body []byte) (IssueComment, error) {
 	var message struct {
 		Issue struct {
@@ -10,14 +18,8 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 				URL string `json:"url"`
 			} `json:"pull_request"`
 		} `json:"issue"`
-		Repository struct {
-			Name  string `json:"name"`
-			Owner struct {
-				Login string `json:"login"`
-			} `json:"owner"`
-			SSHURL string `json:"ssh_url"`
-		} `json:"repository"`
-		Comment struct {
+		Repository messageRepository `json:"repository"`
+		Comment    struct {
 			Body string `json:"body"`
 		} `json:"comment"`
 	}
@@ -44,13 +46,7 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 		PullRequest struct {
 			URL string `json:"url"`
 		} `json:"pull_request"`
-		Repository struct {
-			Name  string `json:"name"`
-			Owner struct {
-				Login string `json:"login"`
-			} `json:"owner"`
-			SSHURL string `json:"ssh_url"`
-		} `json:"repository"`
+		Repository messageRepository `json:"repository"`
 	}
 	err := json.Unmarshal(body, &message)
 	if err != nil {
