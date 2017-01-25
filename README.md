@@ -8,14 +8,19 @@
 **github-review-helper** is a little bot that you can set up GitHub hooks for to improve your project's PR review flow.
 It currently does 2 things:
 
-1. It observes all PRs and detects if any `fixup!` or `squash!` commits are included in the PR. If there are, it uses
-   the GitHub status API to mark the PR as **pending** with `review/squash` context. If there are no *fixup* or *squash*
-   commits, it marks the PR as **success**. This allows one to set the `review/squash` **success** status as required
-   in the repo's GitHub settings to make sure no PR that includes *fixup* or *squash* commits gets accidentally merged.
-2. It observes all PR comments (comments on the unified diff or the individual commits don't count) and if it sees a
-   command of `!squash`, it tries to *autosquash* (equivalent of running `git rebase --interactive --autosquash`
-   manually and instantly closing and saving the interactive rebase editor) all the commits in the PR. Success/failure
-   will be reflected by the `review/squash` status.
+1. It observes all PRs and detects if any `fixup!` or `squash!` commits are
+   included in the PR. If there are, it uses the GitHub status API to mark the
+   PR as **pending** with `review/squash` context. If there are no *fixup* or
+   *squash* commits, it marks the PR as **success**. This allows one to set the
+   `review/squash` **success** status as required in the repo's GitHub settings
+   to make sure no PR that includes *fixup* or *squash* commits gets
+   accidentally merged.
+2. It observes all PR comments (comments on the unified diff or the individual
+   commits don't count) and if it sees a command of `!squash`, it tries to
+   *autosquash* (equivalent of running `git rebase --interactive --autosquash`
+   manually and instantly closing and saving the interactive rebase editor) all
+   the commits in the PR. Success/failure will be reflected by the
+   `review/squash` status.
 
 ## Quick start
 ### Create an access token for the bot
