@@ -69,6 +69,8 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 		return handleSquashCommand(issueComment, gitRepos, pullRequests, repositories)
 	case isMergeCommand(issueComment.Comment):
 		return handleMergeCommand(issueComment, issues, pullRequests, repositories, gitRepos)
+	case isCheckCommand(issueComment.Comment):
+		return checkForFixupCommitsOnIssueComment(issueComment, pullRequests, repositories)
 	}
 	return SuccessResponse{"Not a command I understand. Ignoring."}
 }
@@ -80,7 +82,7 @@ func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories
 	} else if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
-	return checkForFixupCommits(pullRequestEvent, pullRequests, repositories)
+	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories)
 }
 
 func initGithubClient(accessToken string) *github.Client {

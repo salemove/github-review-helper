@@ -16,6 +16,10 @@ func isSquashCommand(comment string) bool {
 	return strings.TrimSpace(comment) == "!squash"
 }
 
+func isCheckCommand(comment string) bool {
+	return strings.TrimSpace(comment) == "!check"
+}
+
 func handleSquashCommand(issueComment IssueComment, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories) Response {
 	pr, errResp := getPR(issueComment, pullRequests)
 	if errResp != nil {
@@ -24,21 +28,39 @@ func handleSquashCommand(issueComment IssueComment, gitRepos git.Repos, pullRequ
 	return squashAndReportFailure(pr, gitRepos, repositories)
 }
 
-func checkForFixupCommits(pullRequestEvent PullRequestEvent, pullRequests PullRequests, repositories Repositories) Response {
-	log.Printf("Checking for fixup commits for PR %s.\n", pullRequestEvent.Issue().FullName())
-	commits, errResp := getCommits(pullRequestEvent, pullRequests)
+func checkForFixupCommitsOnPREvent(pullRequestEvent PullRequestEvent, pullRequests PullRequests, repositories Repositories) Response {
+	setStatus := func(status *github.RepoStatus) *ErrorResponse {
+		return setStatusForPREvent(pullRequestEvent, status, repositories)
+	}
+	return checkForFixupCommits(pullRequestEvent, setStatus, pullRequests)
+}
+
+func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
+	setStatus := func(status *github.RepoStatus) *ErrorResponse {
+		pr, errResp := getPR(issueComment, pullRequests)
+		if errResp != nil {
+			return errResp
+		}
+		return setStatusForPR(pr, status, repositories)
+	}
+	return checkForFixupCommits(issueComment, setStatus, pullRequests)
+}
+
+func checkForFixupCommits(issueable Issueable, setStatus func(*github.RepoStatus) *ErrorResponse, pullRequests PullRequests) Response {
+	log.Printf("Checking for fixup commits for PR %s.\n", issueable.Issue().FullName())
+	commits, errResp := getCommits(issueable, pullRequests)
 	if errResp != nil {
 		return errResp
 	}
 	if !includesFixupCommits(commits) {
 		status := createSquashStatus("success", "No fixup! or squash! commits to be squashed")
-		if errResp := setStatusForPREvent(pullRequestEvent, status, repositories); errResp != nil {
+		if errResp := setStatus(status); errResp != nil {
 			return errResp
 		}
 		return SuccessResponse{}
 	}
 	status := createSquashStatus("pending", "This PR needs to be squashed with !squash before merging")
-	if errResp := setStatusForPREvent(pullRequestEvent, status, repositories); errResp != nil {
+	if errResp := setStatus(status); errResp != nil {
 		return errResp
 	}
 	return SuccessResponse{}

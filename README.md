@@ -6,7 +6,7 @@
 
 ## What?
 **github-review-helper** is a little bot that you can set up GitHub hooks for to improve your project's PR review flow.
-It currently does 2 things:
+It currently does 3 things:
 
 1. It observes all PRs and detects if any `fixup!` or `squash!` commits are
    included in the PR. If there are, it uses the GitHub status API to mark the
@@ -21,6 +21,14 @@ It currently does 2 things:
    manually and instantly closing and saving the interactive rebase editor) all
    the commits in the PR. Success/failure will be reflected by the
    `review/squash` status.
+3. Similarly to `!squash`, it also listens for `!check` commands. The `!check`
+   command can be used to force the bot to (re-)check the current PR for
+   `fixup!` and `squash!` commits. This can be useful when some webhooks didn't
+   reach the bot properly or when you have reason to believe that the bot
+   didn't correctly evaluate your PR automatically. Which can sometimes happen,
+   because the bot is fast and can at times fetch data from the GitHub API
+   before that data has been updated, causing the bot to make it's judgment
+   based on outdated data.
 
 ## Quick start
 ### Create an access token for the bot
