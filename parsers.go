@@ -44,7 +44,10 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 		Action      string `json:"action"`
 		Number      int    `json:"number"`
 		PullRequest struct {
-			URL string `json:"url"`
+			Head struct {
+				SHA        string            `json:"sha"`
+				Repository messageRepository `json:"repo"`
+			} `json:"head"`
 		} `json:"pull_request"`
 		Repository messageRepository `json:"repository"`
 	}
@@ -55,6 +58,14 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 	return PullRequestEvent{
 		IssueNumber: message.Number,
 		Action:      message.Action,
+		Head: PullRequestBranch{
+			SHA: message.PullRequest.Head.SHA,
+			Repository: Repository{
+				Owner: message.PullRequest.Head.Repository.Owner.Login,
+				Name:  message.PullRequest.Head.Repository.Name,
+				URL:   message.PullRequest.Head.Repository.SSHURL,
+			},
+		},
 		Repository: Repository{
 			Owner: message.Repository.Owner.Login,
 			Name:  message.Repository.Name,

@@ -25,6 +25,7 @@ type (
 	PullRequestEvent struct {
 		IssueNumber int
 		Action      string
+		Head        PullRequestBranch
 		Repository  Repository
 	}
 
@@ -32,6 +33,11 @@ type (
 		Owner string
 		Name  string
 		URL   string
+	}
+
+	PullRequestBranch struct {
+		SHA        string
+		Repository Repository
 	}
 )
 
