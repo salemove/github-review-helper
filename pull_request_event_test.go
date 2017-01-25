@@ -48,7 +48,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 		Context("with the PR being closed", func() {
 			requestJSON.Is(func() string {
-				return PullRequestsEvent("closed")
+				return PullRequestEvent("closed")
 			})
 
 			It("succeeds with 'ignored' response", func() {
@@ -62,7 +62,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			var commitRevision = "1235"
 
 			requestJSON.Is(func() string {
-				return PullRequestsEvent("synchronize")
+				return PullRequestEvent("synchronize")
 			})
 
 			Context("with GitHub request to list commits failing", func() {

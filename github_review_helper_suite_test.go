@@ -161,7 +161,7 @@ var IssueCommentEvent = func(comment string) string {
 }`
 }
 
-var PullRequestsEvent = func(action string) string {
+var PullRequestEvent = func(action string) string {
 	return `{
   "action": "` + action + `",
   "number": ` + strconv.Itoa(issueNumber) + `,
