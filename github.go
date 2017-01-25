@@ -114,7 +114,7 @@ func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.Repos
 		}
 		pageCommits, resp, err := pullRequests.ListCommits(issue.Repository.Owner, issue.Repository.Name, issue.Number, listOptions)
 		if err != nil {
-			if errResp, ok := err.(*github.ErrorResponse); ok && errResp.Response.StatusCode == 404 && nrOfRetriesLeft > 0 {
+			if is404Error(err) && nrOfRetriesLeft > 0 {
 				log.Printf("Getting commits for PR %s failed with a 404: \"%s\". Trying again.\n", issue.FullName(), err.Error())
 				nrOfRetriesLeft = nrOfRetriesLeft - 1
 				continue
@@ -164,4 +164,12 @@ func merge(repository Repository, issueNumber int, pullRequests PullRequests) er
 		return errors.New("Request successful, but PR not merged.")
 	}
 	return nil
+}
+
+func is404Error(err error) bool {
+	if errResp, ok := err.(*github.ErrorResponse); ok {
+		return errResp.Response.StatusCode == 404
+	}
+	log.Println("Unable to cast the error to the expected type")
+	return false
 }
