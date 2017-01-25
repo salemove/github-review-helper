@@ -125,19 +125,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							},
 						}, &github.Response{}, nil)
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(&github.PullRequest{
-							Head: &github.PullRequestBranch{
-								SHA:  github.String(commitRevision),
-								Repo: repository,
-							},
-						}, nil, nil)
 				})
 
 				It("reports success status to GitHub", func() {
 					repositories.
-						On("CreateStatus", repositoryOwner, repositoryName, commitRevision,
+						On("CreateStatus", headRepository.Owner, headRepository.Name, commitRevision,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "success" && *status.Context == "review/squash"
 							}),
@@ -178,19 +170,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							},
 						}, &github.Response{}, nil)
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(&github.PullRequest{
-							Head: &github.PullRequestBranch{
-								SHA:  github.String(commitRevision),
-								Repo: repository,
-							},
-						}, nil, nil)
 				})
 
 				It("reports pending squash status to GitHub", func() {
 					repositories.
-						On("CreateStatus", repositoryOwner, repositoryName, commitRevision,
+						On("CreateStatus", headRepository.Owner, headRepository.Name, commitRevision,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "pending" && *status.Context == "review/squash"
 							}),

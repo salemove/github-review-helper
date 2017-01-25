@@ -115,6 +115,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			Context("with the PR being mergeable", func() {
 				headSHA := "1235"
 				pr := &github.PullRequest{
+					Number:    github.Int(issueNumber),
 					Merged:    github.Bool(false),
 					Mergeable: github.Bool(true),
 					Base: &github.PullRequestBranch{

@@ -32,13 +32,13 @@ func checkForFixupCommits(pullRequestEvent PullRequestEvent, pullRequests PullRe
 	}
 	if !includesFixupCommits(commits) {
 		status := createSquashStatus("success", "No fixup! or squash! commits to be squashed")
-		if errResp := setPRHeadStatus(pullRequestEvent, status, pullRequests, repositories); errResp != nil {
+		if errResp := setStatusForPREvent(pullRequestEvent, status, repositories); errResp != nil {
 			return errResp
 		}
 		return SuccessResponse{}
 	}
 	status := createSquashStatus("pending", "This PR needs to be squashed with !squash before merging")
-	if errResp := setPRHeadStatus(pullRequestEvent, status, pullRequests, repositories); errResp != nil {
+	if errResp := setStatusForPREvent(pullRequestEvent, status, repositories); errResp != nil {
 		return errResp
 	}
 	return SuccessResponse{}
@@ -67,7 +67,7 @@ func squashAndReportFailure(pr *github.PullRequest, gitRepos git.Repos, reposito
 	if err == ErrRebase {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
 		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
-		if errResp := setStatus(pr, status, repositories); errResp != nil {
+		if errResp := setStatusForPR(pr, status, repositories); errResp != nil {
 			return errResp
 		}
 		return SuccessResponse{}
@@ -78,7 +78,7 @@ func squashAndReportFailure(pr *github.PullRequest, gitRepos git.Repos, reposito
 }
 
 func squash(pr *github.PullRequest, gitRepos git.Repos, repositories Repositories) error {
-	headRepository := HeadRepository(pr)
+	headRepository := headRepository(pr)
 	gitRepo, err := gitRepos.GetUpdatedRepo(headRepository.URL, headRepository.Owner, headRepository.Name)
 	if err != nil {
 		log.Println(err)
