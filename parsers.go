@@ -2,6 +2,14 @@ package main
 
 import "encoding/json"
 
+type messageRepository struct {
+	Name  string `json:"name"`
+	Owner struct {
+		Login string `json:"login"`
+	} `json:"owner"`
+	SSHURL string `json:"ssh_url"`
+}
+
 func parseIssueComment(body []byte) (IssueComment, error) {
 	var message struct {
 		Issue struct {
@@ -10,14 +18,8 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 				URL string `json:"url"`
 			} `json:"pull_request"`
 		} `json:"issue"`
-		Repository struct {
-			Name  string `json:"name"`
-			Owner struct {
-				Login string `json:"login"`
-			} `json:"owner"`
-			SSHURL string `json:"ssh_url"`
-		} `json:"repository"`
-		Comment struct {
+		Repository messageRepository `json:"repository"`
+		Comment    struct {
 			Body string `json:"body"`
 		} `json:"comment"`
 	}
@@ -42,15 +44,12 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 		Action      string `json:"action"`
 		Number      int    `json:"number"`
 		PullRequest struct {
-			URL string `json:"url"`
+			Head struct {
+				SHA        string            `json:"sha"`
+				Repository messageRepository `json:"repo"`
+			} `json:"head"`
 		} `json:"pull_request"`
-		Repository struct {
-			Name  string `json:"name"`
-			Owner struct {
-				Login string `json:"login"`
-			} `json:"owner"`
-			SSHURL string `json:"ssh_url"`
-		} `json:"repository"`
+		Repository messageRepository `json:"repository"`
 	}
 	err := json.Unmarshal(body, &message)
 	if err != nil {
@@ -59,6 +58,14 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 	return PullRequestEvent{
 		IssueNumber: message.Number,
 		Action:      message.Action,
+		Head: PullRequestBranch{
+			SHA: message.PullRequest.Head.SHA,
+			Repository: Repository{
+				Owner: message.PullRequest.Head.Repository.Owner.Login,
+				Name:  message.PullRequest.Head.Repository.Name,
+				URL:   message.PullRequest.Head.Repository.SSHURL,
+			},
+		},
 		Repository: Repository{
 			Owner: message.Repository.Owner.Login,
 			Name:  message.Repository.Name,

@@ -52,6 +52,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 		Context("with GitHub request succeeding", func() {
 			pr := &github.PullRequest{
+				Number: github.Int(issueNumber),
 				Base: &github.PullRequestBranch{
 					SHA:  github.String("1234"),
 					Ref:  github.String("master"),

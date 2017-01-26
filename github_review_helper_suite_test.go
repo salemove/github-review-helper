@@ -161,12 +161,22 @@ var IssueCommentEvent = func(comment string) string {
 }`
 }
 
-var PullRequestsEvent = func(action string) string {
+var PullRequestEvent = func(action, headSHA string, headRepository grh.Repository) string {
 	return `{
   "action": "` + action + `",
   "number": ` + strconv.Itoa(issueNumber) + `,
   "pull_request": {
-    "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
+    "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `",
+    "head": {
+      "sha": "` + headSHA + `",
+      "repo": {
+        "name": "` + headRepository.Name + `",
+        "owner": {
+          "login": "` + headRepository.Owner + `"
+        },
+        "ssh_url": "` + headRepository.URL + `"
+      }
+    }
   },
   "repository": {
     "name": "` + repositoryName + `",

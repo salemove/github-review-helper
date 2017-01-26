@@ -32,38 +32,49 @@ type Issues interface {
 	RemoveLabelForIssue(owner, repo string, number int, label string) (*github.Response, error)
 }
 
-func setPRHeadStatus(issueable Issueable, status *github.RepoStatus, pullRequests PullRequests, repositories Repositories) *ErrorResponse {
-	pr, errResp := getPR(issueable, pullRequests)
-	if errResp != nil {
-		return errResp
-	}
+func setStatusForPREvent(pullRequestEvent PullRequestEvent, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
+	// see comment in setStatusForPR for why Head is used instead of Base here
+	repository := pullRequestEvent.Head.Repository
+	revision := pullRequestEvent.Head.SHA
 	log.Printf(
 		"Setting %s status to %s for PR %s (revision %s).\n",
 		*status.Context,
 		*status.State,
-		issueable.Issue().FullName(),
-		*pr.Head.SHA,
+		pullRequestEvent.Issue().FullName(),
+		revision,
 	)
-	return setStatus(pr, status, repositories)
+	return setStatus(revision, repository, status, repositories)
 }
 
-func setStatus(pr *github.PullRequest, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
+func setStatusForPR(pr *github.PullRequest, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
 	// I'm assuming (because the documentation on this is unclear) that the
 	// status has to be reported for the Head repository. It might seem
 	// weird, because why should a bot configured for the Base repository
 	// have access to the Head repository, but AFAIK all forks must be
 	// public and reporting statuses on public repos is always allowed.
-	headRepository := HeadRepository(pr)
-	_, _, err := repositories.CreateStatus(headRepository.Owner, headRepository.Name, *pr.Head.SHA, status)
+	repository := headRepository(pr)
+	revision := *pr.Head.SHA
+	log.Printf(
+		"Setting %s status to %s for PR %s (revision %s).\n",
+		*status.Context,
+		*status.State,
+		prFullName(pr),
+		revision,
+	)
+	return setStatus(revision, repository, status, repositories)
+}
+
+func setStatus(revision string, repository Repository, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
+	_, _, err := repositories.CreateStatus(repository.Owner, repository.Name, revision, status)
 	if err != nil {
-		message := fmt.Sprintf("Failed to create a %s status for commit %s", *status.State, *pr.Head.SHA)
+		message := fmt.Sprintf("Failed to create a %s status for commit %s", *status.State, revision)
 		return &ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	return nil
 }
 
 func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []github.RepoStatus, *ErrorResponse) {
-	headRepository := HeadRepository(pr)
+	headRepository := headRepository(pr)
 	pageNr := 1
 	statuses := []github.RepoStatus{}
 	var state string
@@ -114,7 +125,7 @@ func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.Repos
 		}
 		pageCommits, resp, err := pullRequests.ListCommits(issue.Repository.Owner, issue.Repository.Name, issue.Number, listOptions)
 		if err != nil {
-			if errResp, ok := err.(*github.ErrorResponse); ok && errResp.Response.StatusCode == 404 && nrOfRetriesLeft > 0 {
+			if is404Error(err) && nrOfRetriesLeft > 0 {
 				log.Printf("Getting commits for PR %s failed with a 404: \"%s\". Trying again.\n", issue.FullName(), err.Error())
 				nrOfRetriesLeft = nrOfRetriesLeft - 1
 				continue
@@ -164,4 +175,12 @@ func merge(repository Repository, issueNumber int, pullRequests PullRequests) er
 		return errors.New("Request successful, but PR not merged.")
 	}
 	return nil
+}
+
+func is404Error(err error) bool {
+	if errResp, ok := err.(*github.ErrorResponse); ok {
+		return errResp.Response.StatusCode == 404
+	}
+	log.Println("Unable to cast the error to the expected type")
+	return false
 }

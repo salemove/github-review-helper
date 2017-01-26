@@ -40,6 +40,13 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			repositories = *context.Repositories
 		})
 
+		var commitRevision = "1235"
+		var headRepository = grh.Repository{
+			Owner: "other",
+			Name:  "github-review-helper-fork",
+			URL:   "git@github.com:other/github-review-helper-fork.git",
+		}
+
 		headers.Is(func() map[string]string {
 			return map[string]string{
 				"X-Github-Event": "pull_request",
@@ -48,7 +55,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 		Context("with the PR being closed", func() {
 			requestJSON.Is(func() string {
-				return PullRequestsEvent("closed")
+				return PullRequestEvent("closed", commitRevision, headRepository)
 			})
 
 			It("succeeds with 'ignored' response", func() {
@@ -59,10 +66,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 		})
 
 		Context("with the PR being synchronized", func() {
-			var commitRevision = "1235"
-
 			requestJSON.Is(func() string {
-				return PullRequestsEvent("synchronize")
+				return PullRequestEvent("synchronize", commitRevision, headRepository)
 			})
 
 			Context("with GitHub request to list commits failing", func() {
@@ -120,19 +125,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							},
 						}, &github.Response{}, nil)
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(&github.PullRequest{
-							Head: &github.PullRequestBranch{
-								SHA:  github.String(commitRevision),
-								Repo: repository,
-							},
-						}, nil, nil)
 				})
 
 				It("reports success status to GitHub", func() {
 					repositories.
-						On("CreateStatus", repositoryOwner, repositoryName, commitRevision,
+						On("CreateStatus", headRepository.Owner, headRepository.Name, commitRevision,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "success" && *status.Context == "review/squash"
 							}),
@@ -173,19 +170,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							},
 						}, &github.Response{}, nil)
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(&github.PullRequest{
-							Head: &github.PullRequestBranch{
-								SHA:  github.String(commitRevision),
-								Repo: repository,
-							},
-						}, nil, nil)
 				})
 
 				It("reports pending squash status to GitHub", func() {
 					repositories.
-						On("CreateStatus", repositoryOwner, repositoryName, commitRevision,
+						On("CreateStatus", headRepository.Owner, headRepository.Name, commitRevision,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "pending" && *status.Context == "review/squash"
 							}),

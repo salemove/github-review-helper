@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -24,7 +23,6 @@ type Repo interface {
 	// the editor for interactive rebase.
 	RebaseAutosquash(upstreamRef, branchRef string) error
 	ForcePushHeadTo(remoteRef string) error
-	GetHeadSHA() (string, error)
 }
 
 type repos struct {
@@ -132,18 +130,6 @@ func (r *repo) ForcePushHeadTo(remoteRef string) error {
 		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil
-}
-
-func (r *repo) GetHeadSHA() (string, error) {
-	r.Lock()
-	defer r.Unlock()
-
-	output, err := exec.Command("git", "-C", r.path, "rev-parse", "@").Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get the current HEAD's SHA: %v", err)
-	}
-	headSHA := strings.TrimSpace(string(output[:]))
-	return headSHA, nil
 }
 
 func runWithLogging(name string, args ...string) error {

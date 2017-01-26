@@ -25,6 +25,7 @@ type (
 	PullRequestEvent struct {
 		IssueNumber int
 		Action      string
+		Head        PullRequestBranch
 		Repository  Repository
 	}
 
@@ -32,6 +33,11 @@ type (
 		Owner string
 		Name  string
 		URL   string
+	}
+
+	PullRequestBranch struct {
+		SHA        string
+		Repository Repository
 	}
 )
 
@@ -53,7 +59,12 @@ func (i Issue) FullName() string {
 	return fmt.Sprintf("%s/%s#%d", i.Repository.Owner, i.Repository.Name, i.Number)
 }
 
-func HeadRepository(pr *github.PullRequest) Repository {
+func prFullName(pr *github.PullRequest) string {
+	baseRepository := pr.Base.Repo
+	return fmt.Sprintf("%s/%s#%d", *baseRepository.Owner.Login, *baseRepository.Name, *pr.Number)
+}
+
+func headRepository(pr *github.PullRequest) Repository {
 	return Repository{
 		Owner: *pr.Head.Repo.Owner.Login,
 		Name:  *pr.Head.Repo.Name,
