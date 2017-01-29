@@ -36,5 +36,6 @@ type SuccessResponse struct {
 }
 
 func (r SuccessResponse) WriteResponse(w http.ResponseWriter) {
+	log.Printf("Responding with a success message: %s\n", r.Message)
 	w.Write([]byte(r.Message))
 }
