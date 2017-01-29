@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -27,6 +28,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			pullRequests     *mocks.PullRequests
 			repositories     *mocks.Repositories
 			issues           *mocks.Issues
+
+			issueAuthor = "procoder"
 		)
 		BeforeEach(func() {
 			responseRecorder = *context.ResponseRecorder
@@ -41,7 +44,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			}
 		})
 		requestJSON.Is(func() string {
-			return IssueCommentEvent("!merge")
+			return IssueCommentEvent("!merge", issueAuthor)
 		})
 
 		Context("with github request to add the label failing", func() {
@@ -89,7 +92,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				It("removes the 'merging' label from the PR", func() {
 					issues.
 						On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
-						Return(nil, nil, nil)
+						Return(nil, nil)
 
 					handle()
 					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
@@ -219,7 +222,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						})
 					})
 
-					Context("with head branch having changed", func() {
+					Context("with merge failing due to a merge conflict", func() {
 						mockMergeFailWithConflict := func() *mock.Call {
 							additionalCommitMessage := ""
 							resp := &http.Response{
@@ -238,55 +241,64 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 									Response: resp,
 								}, &github.ErrorResponse{
 									Response: resp,
-									Message:  "Head branch was modified. Review and try the merge again.",
+									Message:  "Merge conflict",
 								})
 						}
 
-						Context("every time", func() {
-							BeforeEach(func() {
-								mockMergeFailWithConflict()
-							})
-
-							It("retries and fails with a gateway error", func() {
-								handle()
-
-								// +1 because of the initial attempt
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", grh.MergeRetryLimit+1)
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", grh.MergeRetryLimit+1)
-								Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
-							})
+						matchIssueCommentContainingAuthorMention := mock.MatchedBy(func(issueComment *github.IssueComment) bool {
+							return strings.Contains(*issueComment.Body, "@"+issueAuthor)
 						})
 
-						Context("with merge succeeding with first retry", func() {
-							BeforeEach(func() {
-								mockMergeFailWithConflict().Once()
+						BeforeEach(func() {
+							mockMergeFailWithConflict()
+						})
 
-								additionalCommitMessage := ""
-								pullRequests.
-									On(
-										"Merge",
-										repositoryOwner,
-										repositoryName,
-										issueNumber,
-										additionalCommitMessage,
-										noSquashOpts,
-									).
-									Return(&github.PullRequestMergeResult{
-										Merged: github.Bool(true),
-									}, nil, nil).
-									Once()
+						Context("with removing the label failing", func() {
+							BeforeEach(func() {
+								issues.
+									On("RemoveLabelForIssue", repositoryOwner, repositoryName,
+										issueNumber, grh.MergingLabel).
+									Return(nil, errors.New("arbitrary error"))
 							})
 
-							It("removes the 'merging' label from the PR after the merge", func() {
+							It("notifies PR author and fails with a gateway error", func() {
 								issues.
-									On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+									On("CreateComment", repositoryOwner, repositoryName,
+										issueNumber, matchIssueCommentContainingAuthorMention).
 									Return(nil, nil, nil)
 
 								handle()
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", 2)
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", 2)
-								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+								Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
 							})
+
+							Context("with author notification failing", func() {
+								BeforeEach(func() {
+									issues.
+										On("CreateComment", repositoryOwner, repositoryName,
+											issueNumber, matchIssueCommentContainingAuthorMention).
+										Return(nil, nil, errors.New("arbitrary error"))
+								})
+
+								It("fails with a gateway error", func() {
+									handle()
+									Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+								})
+							})
+						})
+
+						It("removes the 'merging' label and notifies the author", func() {
+							issues.
+								On("RemoveLabelForIssue", repositoryOwner, repositoryName,
+									issueNumber, grh.MergingLabel).
+								Return(nil, nil)
+							issues.
+								On("CreateComment", repositoryOwner, repositoryName,
+									issueNumber, matchIssueCommentContainingAuthorMention).
+								Return(nil, nil, nil)
+
+							handle()
+
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 						})
 					})
 
@@ -341,7 +353,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						It("removes the 'merging' label from the PR after the merge", func() {
 							issues.
 								On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
-								Return(nil, nil, nil)
+								Return(nil, nil)
 
 							handle()
 							Expect(responseRecorder.Code).To(Equal(http.StatusOK))

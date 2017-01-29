@@ -17,6 +17,9 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 			PullRequest struct {
 				URL string `json:"url"`
 			} `json:"pull_request"`
+			User struct {
+				Login string `json:"login"`
+			} `json:"user"`
 		} `json:"issue"`
 		Repository messageRepository `json:"repository"`
 		Comment    struct {
@@ -36,6 +39,9 @@ func parseIssueComment(body []byte) (IssueComment, error) {
 			Name:  message.Repository.Name,
 			URL:   message.Repository.SSHURL,
 		},
+		User: User{
+			Login: message.Issue.User.Login,
+		},
 	}, nil
 }
 
@@ -48,6 +54,9 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 				SHA        string            `json:"sha"`
 				Repository messageRepository `json:"repo"`
 			} `json:"head"`
+			User struct {
+				Login string `json:"login"`
+			} `json:"user"`
 		} `json:"pull_request"`
 		Repository messageRepository `json:"repository"`
 	}
@@ -70,6 +79,9 @@ func parsePullRequestEvent(body []byte) (PullRequestEvent, error) {
 			Owner: message.Repository.Owner.Login,
 			Name:  message.Repository.Name,
 			URL:   message.Repository.SSHURL,
+		},
+		User: User{
+			Login: message.PullRequest.User.Login,
 		},
 	}, nil
 }

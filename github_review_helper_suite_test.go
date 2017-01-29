@@ -23,10 +23,11 @@ import (
 )
 
 const (
-	repositoryOwner = "salemove"
-	repositoryName  = "github-review-helper"
-	sshURL          = "git@github.com:salemove/github-review-helper.git"
-	issueNumber     = 7
+	repositoryOwner      = "salemove"
+	repositoryName       = "github-review-helper"
+	sshURL               = "git@github.com:salemove/github-review-helper.git"
+	issueNumber          = 7
+	arbitraryIssueAuthor = "author"
 )
 
 var (
@@ -141,12 +142,15 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 	return true
 }
 
-var IssueCommentEvent = func(comment string) string {
+var IssueCommentEvent = func(comment, issueAuthor string) string {
 	return `{
   "issue": {
     "number": ` + strconv.Itoa(issueNumber) + `,
     "pull_request": {
       "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
+    },
+    "user": {
+      "login": "` + issueAuthor + `"
     }
   },
   "comment": {
@@ -177,6 +181,9 @@ var PullRequestEvent = func(action, headSHA string, headRepository grh.Repositor
         },
         "ssh_url": "` + headRepository.URL + `"
       }
+    },
+    "user": {
+      "login": "` + arbitraryIssueAuthor + `"
     }
   },
   "repository": {

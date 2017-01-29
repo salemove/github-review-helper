@@ -14,7 +14,7 @@ const (
 )
 
 var ErrNotMergeable = errors.New("PullRequests is not mergeable.")
-var ErrOutdatedMergeRef = errors.New("Merge failed because head branch has been modified.")
+var ErrMergeConflict = errors.New("Merge failed because of a merge conflict.")
 
 type PullRequests interface {
 	Get(owner, repo string, number int) (*github.PullRequest, *github.Response, error)
@@ -30,6 +30,7 @@ type Repositories interface {
 type Issues interface {
 	AddLabelsToIssue(owner, repo string, number int, labels []string) ([]*github.Label, *github.Response, error)
 	RemoveLabelForIssue(owner, repo string, number int, label string) (*github.Response, error)
+	CreateComment(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error)
 }
 
 func setStatusForPREvent(pullRequestEvent PullRequestEvent, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
@@ -168,13 +169,21 @@ func merge(repository Repository, issueNumber int, pullRequests PullRequests) er
 		if resp != nil && resp.StatusCode == http.StatusMethodNotAllowed {
 			return ErrNotMergeable
 		} else if resp != nil && resp.StatusCode == http.StatusConflict {
-			return ErrOutdatedMergeRef
+			return ErrMergeConflict
 		}
 		return err
 	} else if result.Merged == nil || !*result.Merged {
 		return errors.New("Request successful, but PR not merged.")
 	}
 	return nil
+}
+
+func comment(message string, repository Repository, issueNumber int, issues Issues) error {
+	issueComment := &github.IssueComment{
+		Body: github.String(message),
+	}
+	_, _, err := issues.CreateComment(repository.Owner, repository.Name, issueNumber, issueComment)
+	return err
 }
 
 func is404Error(resp *github.Response) bool {

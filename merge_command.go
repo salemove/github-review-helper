@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	MergingLabel    = "merging"
-	MergeRetryLimit = 3
+	MergingLabel = "merging"
 )
 
 func isMergeCommand(comment string) bool {
@@ -35,10 +34,10 @@ func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests P
 	if errResp != nil {
 		return errResp
 	}
-	return mergeWithRetry(MergeRetryLimit, issueComment, issues, pullRequests, repositories, gitRepos)
+	return tryMerging(issueComment, issues, pullRequests, repositories, gitRepos)
 }
 
-func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, pullRequests PullRequests,
+func tryMerging(issueComment IssueComment, issues Issues, pullRequests PullRequests,
 	repositories Repositories, gitRepos git.Repos) Response {
 	pr, errResp := getPR(issueComment, pullRequests)
 	if errResp != nil {
@@ -63,13 +62,44 @@ func mergeWithRetry(nrOfRetries int, issueComment IssueComment, issues Issues, p
 		return SuccessResponse{}
 	}
 	err := merge(issueComment.Repository, issueComment.IssueNumber, pullRequests)
-	if err == ErrOutdatedMergeRef && nrOfRetries > 0 {
-		return mergeWithRetry(nrOfRetries-1, issueComment, issues, pullRequests, repositories, gitRepos)
+	if err == ErrMergeConflict {
+		log.Printf(
+			"Merging PR %s failed due to a merge conflict. Removing the '%s' label and notifying the author.\n",
+			issueComment.Issue().FullName(),
+			MergingLabel,
+		)
+		removeLabelErrResp := removeLabel(issueComment.Repository, issueComment.IssueNumber, MergingLabel, issues)
+		if removeLabelErrResp != nil {
+			log.Printf(
+				"Failed to remove the '%s' label. Still notifying the author of the merge conflict. %v\n",
+				MergingLabel,
+				removeLabelErrResp.Error,
+			)
+		}
+		message := fmt.Sprintf("I'm unable to merge this PR because of a merge conflict."+
+			" @%s, can you please take a look?", issueComment.User.Login)
+		err = comment(message, issueComment.Repository, issueComment.IssueNumber, issues)
+		if err != nil {
+			errorMessage := fmt.Sprintf(
+				"Failed to notify the author of PR %s about the merge conflict",
+				issueComment.Issue().FullName(),
+			)
+			return ErrorResponse{err, http.StatusBadGateway, errorMessage}
+		} else if removeLabelErrResp != nil {
+			// Still mark the request as failed, because we were unable to
+			// remove the label properly.
+			return removeLabelErrResp
+		}
+		return SuccessResponse{}
 	} else if err != nil {
-		message := fmt.Sprintf("Failed to merge PR #%d", issueComment.IssueNumber)
+		message := fmt.Sprintf("Failed to merge PR %s", issueComment.Issue().FullName())
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
-	log.Printf("PR #%d successfully merged. Removing the '%s' label.\n", issueComment.IssueNumber, MergingLabel)
+	log.Printf(
+		"PR %s successfully merged. Removing the '%s' label.\n",
+		issueComment.Issue().FullName(),
+		MergingLabel,
+	)
 	errResp = removeLabel(issueComment.Repository, issueComment.IssueNumber, MergingLabel, issues)
 	if errResp != nil {
 		return errResp

@@ -9,6 +9,7 @@ type (
 	Issue struct {
 		Number     int
 		Repository Repository
+		User User
 	}
 
 	Issueable interface {
@@ -20,6 +21,7 @@ type (
 		Comment       string
 		IsPullRequest bool
 		Repository    Repository
+		User          User
 	}
 
 	PullRequestEvent struct {
@@ -27,6 +29,7 @@ type (
 		Action      string
 		Head        PullRequestBranch
 		Repository  Repository
+		User        User
 	}
 
 	StatusEvent struct {
@@ -50,12 +53,17 @@ type (
 	Branch struct {
 		SHA string // The SHA of the head commit of the branch
 	}
+
+	User struct {
+		Login string
+	}
 )
 
 func (i IssueComment) Issue() Issue {
 	return Issue{
 		Number:     i.IssueNumber,
 		Repository: i.Repository,
+		User: i.User,
 	}
 }
 
@@ -63,6 +71,7 @@ func (p PullRequestEvent) Issue() Issue {
 	return Issue{
 		Number:     p.IssueNumber,
 		Repository: p.Repository,
+		User: p.User,
 	}
 }
 

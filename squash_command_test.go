@@ -34,7 +34,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			}
 		})
 		requestJSON.Is(func() string {
-			return IssueCommentEvent("!squash")
+			return IssueCommentEvent("!squash", arbitraryIssueAuthor)
 		})
 
 		Context("with GitHub request failing", func() {
