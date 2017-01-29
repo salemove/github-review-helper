@@ -14,13 +14,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var createGithubErrorResponse = func(statusCode int) *github.ErrorResponse {
-	return &github.ErrorResponse{
-		Response: &http.Response{
-			StatusCode: statusCode,
-			Request:    &http.Request{},
-		},
+var createGithubErrorResponse = func(statusCode int) (*github.Response, *github.ErrorResponse) {
+	httpResponse := &http.Response{
+		StatusCode: statusCode,
+		Request:    &http.Request{},
 	}
+	return &github.Response{Response: httpResponse}, &github.ErrorResponse{Response: httpResponse}
 }
 
 var _ = TestWebhookHandler(func(context WebhookTestContext) {
@@ -73,9 +72,10 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			Context("with GitHub request to list commits failing", func() {
 				Context("with a 404", func() {
 					BeforeEach(func() {
+						resp, err := createGithubErrorResponse(http.StatusNotFound)
 						pullRequests.
 							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-							Return(nil, nil, createGithubErrorResponse(404))
+							Return(nil, resp, err)
 					})
 
 					It("fails with a gateway error", func() {

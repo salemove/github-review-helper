@@ -52,9 +52,10 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 		Context("with GitHub request to list commits failing", func() {
 			Context("with a 404", func() {
 				BeforeEach(func() {
+					resp, err := createGithubErrorResponse(http.StatusNotFound)
 					pullRequests.
 						On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return(nil, nil, createGithubErrorResponse(404))
+						Return(nil, resp, err)
 				})
 
 				It("fails with a gateway error", func() {
