@@ -200,14 +200,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							}, &github.Response{}, nil)
 					})
 
-					ItMergesPR(context, issueAuthor)
+					ItMergesPR(context, issueAuthor, issueNumber)
 				})
 			})
 		})
 	})
 })
 
-var ItMergesPR = func(context WebhookTestContext, issueAuthor string) {
+var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumber int) {
 	var (
 		handle = context.Handle
 

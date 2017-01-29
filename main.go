@@ -31,12 +31,20 @@ func main() {
 	gitRepos := git.NewRepos(reposDir)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", CreateHandler(conf, gitRepos, githubClient.PullRequests, githubClient.Repositories, githubClient.Issues))
+	mux.Handle("/", CreateHandler(
+		conf,
+		gitRepos,
+		githubClient.PullRequests,
+		githubClient.Repositories,
+		githubClient.Issues,
+		githubClient.Search,
+	))
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
 }
 
-func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories, issues Issues) Handler {
+func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories,
+	issues Issues, search Search) Handler {
 	return func(w http.ResponseWriter, r *http.Request) Response {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -52,7 +60,7 @@ func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, r
 		case "pull_request":
 			return handlePullRequestEvent(body, pullRequests, repositories)
 		case "status":
-			return handleStatusEvent(body)
+			return handleStatusEvent(body, search, issues, pullRequests)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
 	}
@@ -87,14 +95,14 @@ func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories
 	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories)
 }
 
-func handleStatusEvent(body []byte) Response {
+func handleStatusEvent(body []byte, search Search, issues Issues, pullRequests PullRequests) Response {
 	statusEvent, err := parseStatusEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	} else if newPullRequestsPossiblyReadyForMerging(statusEvent) {
-		return SuccessResponse{""}
+		return mergePullRequestsReadyForMerging(statusEvent, search, issues, pullRequests)
 	}
-	return ErrorResponse{err, http.StatusInternalServerError, "XXX: Temporary error, to simplify testing"}
+	return SuccessResponse{"Status update does not affect any PRs mergeability. Ignoring."}
 }
 
 func initGithubClient(accessToken string) *github.Client {

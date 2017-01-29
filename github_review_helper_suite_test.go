@@ -55,6 +55,7 @@ type WebhookTestContext struct {
 	PullRequests     **mocks.PullRequests
 	Repositories     **mocks.Repositories
 	Issues           **mocks.Issues
+	Search           **mocks.Search
 }
 
 type WebhookTest func(WebhookTestContext)
@@ -78,6 +79,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			pullRequests     = new(*mocks.PullRequests)
 			repositories     = new(*mocks.Repositories)
 			issues           = new(*mocks.Issues)
+			search           = new(*mocks.Search)
 		)
 
 		BeforeEach(func() {
@@ -85,13 +87,14 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			*pullRequests = new(mocks.PullRequests)
 			*repositories = new(mocks.Repositories)
 			*issues = new(mocks.Issues)
+			*search = new(mocks.Search)
 
 			*responseRecorder = httptest.NewRecorder()
 
 			conf = grh.Config{
 				Secret: "a-secret",
 			}
-			*handler = grh.CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues)
+			*handler = grh.CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues, *search)
 		})
 
 		JustBeforeEach(func() {
@@ -118,6 +121,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			(*pullRequests).AssertExpectations(GinkgoT())
 			(*repositories).AssertExpectations(GinkgoT())
 			(*issues).AssertExpectations(GinkgoT())
+			(*search).AssertExpectations(GinkgoT())
 		})
 
 		var handle = func() {
@@ -134,6 +138,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			PullRequests:     pullRequests,
 			Repositories:     repositories,
 			Issues:           issues,
+			Search:           search,
 		})
 	})
 

@@ -82,6 +82,56 @@ func mergeReadyPR(issue Issue, issues Issues, pullRequests PullRequests) *ErrorR
 	return nil
 }
 
+func mergePullRequestsReadyForMerging(statusEvent StatusEvent, search Search, issues Issues,
+	pullRequests PullRequests) Response {
+	// Not sure if applying the additional repo:owner/name filter to the query
+	// works for cross-fork PRs, but nothing else has been tested with
+	// cross-fork PRs either so this is left in for now.
+	//
+	// Also, specifying the SHA for the search query doesn't guarantee that the
+	// SHA is the HEAD of the returned PRs. This means that, if the commit is
+	// in 2 different PRs, both of which have the "merging" label and have
+	// "success" status then it can happen that it will try to merge both.
+	// Which might not be intended, but is still okay, because both PRs do
+	// match all the criteria required for merging.
+	query := fmt.Sprintf(
+		"%s label:\"%s\" is:open repo:%s/%s status:success",
+		statusEvent.SHA,
+		MergingLabel,
+		statusEvent.Repository.Owner,
+		statusEvent.Repository.Name,
+	)
+	issuesToMerge, err := searchIssues(query, search)
+	if err != nil {
+		message := fmt.Sprintf("Searching for issues with query '%s' failed", query)
+		return ErrorResponse{err, http.StatusBadGateway, message}
+	}
+	var finalErrResp *ErrorResponse
+	for _, issueToMerge := range issuesToMerge {
+		issue := Issue{
+			Number:     *issueToMerge.Number,
+			Repository: statusEvent.Repository,
+			User: User{
+				Login: *issueToMerge.User.Login,
+			},
+		}
+		if errResp := mergeReadyPR(issue, issues, pullRequests); errResp != nil {
+			if finalErrResp == nil {
+				finalErrResp = errResp
+			} else {
+				log.Printf("Multiple PR merge errors have occured. Marking the latest error to be "+
+					"returned as a response, replacing the previous error. Logging the previous "+
+					"error:\n%s: %v\n", finalErrResp.ErrorMessage, finalErrResp.Error)
+				finalErrResp = errResp
+			}
+		}
+	}
+	if finalErrResp != nil {
+		return finalErrResp
+	}
+	return SuccessResponse{fmt.Sprintf("Successfully merged %d PRs", len(issuesToMerge))}
+}
+
 func containsPendingSquashStatus(statuses []github.RepoStatus) bool {
 	for _, status := range statuses {
 		if *status.Context == githubStatusSquashContext && *status.State == "pending" {

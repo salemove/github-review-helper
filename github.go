@@ -33,6 +33,10 @@ type Issues interface {
 	CreateComment(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error)
 }
 
+type Search interface {
+	Issues(query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error)
+}
+
 func setStatusForPREvent(pullRequestEvent PullRequestEvent, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
 	// see comment in setStatusForPR for why Head is used instead of Base here
 	repository := pullRequestEvent.Head.Repository
@@ -102,6 +106,31 @@ func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []g
 		pageNr = resp.NextPage
 	}
 	return state, statuses, nil
+}
+
+func searchIssues(query string, search Search) ([]github.Issue, error) {
+	pageNr := 1
+	issues := []github.Issue{}
+	for {
+		listOptions := github.ListOptions{
+			Page: pageNr,
+			// Max is 100: https://developer.github.com/v3/#pagination
+			PerPage: 100,
+		}
+		searchOptions := &github.SearchOptions{ListOptions: listOptions}
+
+		searchResult, resp, err := search.Issues(query, searchOptions)
+		if err != nil {
+			return nil, err
+		}
+
+		issues = append(issues, searchResult.Issues...)
+		if resp.NextPage == 0 {
+			break
+		}
+		pageNr = resp.NextPage
+	}
+	return issues, nil
 }
 
 func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest, *ErrorResponse) {
