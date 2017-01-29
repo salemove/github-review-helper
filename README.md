@@ -6,7 +6,7 @@
 
 ## What?
 **github-review-helper** is a little bot that you can set up GitHub hooks for to improve your project's PR review flow.
-It currently does 3 things:
+It currently does 4 things:
 
 1. It observes all PRs and detects if any `fixup!` or `squash!` commits are
    included in the PR. If there are, it uses the GitHub status API to mark the
@@ -29,6 +29,11 @@ It currently does 3 things:
    because the bot is fast and can at times fetch data from the GitHub API
    before that data has been updated, causing the bot to make it's judgment
    based on outdated data.
+4. It listens for `!merge` commands. `!merge` command will squash the PR
+   (exactly like `!squash` would) if needed and will then merge the PR as soon
+   as all required status checks are marked as "success". If any of the status
+   checks fail after that, the bot will cancel the merging process (indicated
+   by a 'merging' label on the PR) and will notify the PR's author.
 
 ## Quick start
 ### Create an access token for the bot
@@ -101,8 +106,8 @@ services**. After that, click on **Add webhook**. Then:
  - Enter the ngrok address you marked down earlier as the **Payload URL**
  - Leave **Content type** to be `application/json`
  - Enter the secret token you created before and used to start the bot as the **Secret**
- - Use the **Let me set individual events** option and select the **Issue comment** and **Pull Request** events from the
-   list that gets opened
+ - Use the **Let me set individual events** option and select the **Issue comment**, **Pull Request**, and **Status**
+   events from the list that gets opened
  - Enable the webhook by leaving the **Active** checkbox checked
 
 Click on **Add webhook** to finish the process.
