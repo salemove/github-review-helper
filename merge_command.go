@@ -34,11 +34,6 @@ func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests P
 	if errResp != nil {
 		return errResp
 	}
-	return tryMerging(issueComment, issues, pullRequests, repositories, gitRepos)
-}
-
-func tryMerging(issueComment IssueComment, issues Issues, pullRequests PullRequests,
-	repositories Repositories, gitRepos git.Repos) Response {
 	pr, errResp := getPR(issueComment, pullRequests)
 	if errResp != nil {
 		return errResp
@@ -61,19 +56,23 @@ func tryMerging(issueComment IssueComment, issues Issues, pullRequests PullReque
 		log.Printf("PR #%d has pending and/or failed statuses. Not merging.\n", issueComment.IssueNumber)
 		return SuccessResponse{}
 	}
-	err := merge(issueComment.Repository, issueComment.IssueNumber, pullRequests)
+	return mergeReadyPR(issueComment.Issue(), issues, pullRequests)
+}
+
+func mergeReadyPR(issue Issue, issues Issues, pullRequests PullRequests) Response {
+	err := merge(issue.Repository, issue.Number, pullRequests)
 	if err == ErrMergeConflict {
-		return handleMergeConflict(issueComment.Issue(), issues)
+		return handleMergeConflict(issue, issues)
 	} else if err != nil {
-		message := fmt.Sprintf("Failed to merge PR %s", issueComment.Issue().FullName())
+		message := fmt.Sprintf("Failed to merge PR %s", issue.FullName())
 		return ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	log.Printf(
 		"PR %s successfully merged. Removing the '%s' label.\n",
-		issueComment.Issue().FullName(),
+		issue.FullName(),
 		MergingLabel,
 	)
-	errResp = removeLabel(issueComment.Repository, issueComment.IssueNumber, MergingLabel, issues)
+	errResp := removeLabel(issue.Repository, issue.Number, MergingLabel, issues)
 	if errResp != nil {
 		return errResp
 	}
