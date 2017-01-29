@@ -56,16 +56,19 @@ func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests P
 		log.Printf("PR #%d has pending and/or failed statuses. Not merging.\n", issueComment.IssueNumber)
 		return SuccessResponse{}
 	}
-	return mergeReadyPR(issueComment.Issue(), issues, pullRequests)
+	if errResp = mergeReadyPR(issueComment.Issue(), issues, pullRequests); errResp != nil {
+		return errResp
+	}
+	return SuccessResponse{fmt.Sprintf("Successfully merged PR %s", issueComment.Issue().FullName())}
 }
 
-func mergeReadyPR(issue Issue, issues Issues, pullRequests PullRequests) Response {
+func mergeReadyPR(issue Issue, issues Issues, pullRequests PullRequests) *ErrorResponse {
 	err := merge(issue.Repository, issue.Number, pullRequests)
 	if err == ErrMergeConflict {
 		return handleMergeConflict(issue, issues)
 	} else if err != nil {
 		message := fmt.Sprintf("Failed to merge PR %s", issue.FullName())
-		return ErrorResponse{err, http.StatusBadGateway, message}
+		return &ErrorResponse{err, http.StatusBadGateway, message}
 	}
 	log.Printf(
 		"PR %s successfully merged. Removing the '%s' label.\n",
@@ -76,7 +79,7 @@ func mergeReadyPR(issue Issue, issues Issues, pullRequests PullRequests) Respons
 	if errResp != nil {
 		return errResp
 	}
-	return SuccessResponse{}
+	return nil
 }
 
 func containsPendingSquashStatus(statuses []github.RepoStatus) bool {
@@ -97,7 +100,7 @@ func isStatusForBranchHead(statusEvent StatusEvent) bool {
 	return false
 }
 
-func handleMergeConflict(issue Issue, issues Issues) Response {
+func handleMergeConflict(issue Issue, issues Issues) *ErrorResponse {
 	log.Printf(
 		"Merging PR %s failed due to a merge conflict. Removing the '%s' label and notifying the author.\n",
 		issue.FullName(),
@@ -119,11 +122,11 @@ func handleMergeConflict(issue Issue, issues Issues) Response {
 			"Failed to notify the author of PR %s about the merge conflict",
 			issue.FullName(),
 		)
-		return ErrorResponse{err, http.StatusBadGateway, errorMessage}
+		return &ErrorResponse{err, http.StatusBadGateway, errorMessage}
 	} else if removeLabelErrResp != nil {
 		// Still mark the request as failed, because we were unable to
 		// remove the label properly.
 		return removeLabelErrResp
 	}
-	return SuccessResponse{}
+	return nil
 }
