@@ -98,7 +98,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				Context("with issue search failing", func() {
 					BeforeEach(func() {
-						mockSearchQuery(1).Return(nil, nil, errors.New("arbitrary error"))
+						mockSearchQuery(1).Return(emptyResult, emptyResponse, errors.New("arbitrary error"))
 					})
 
 					It("fails with a gateway error", func() {
@@ -113,7 +113,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Total:  github.Int(0),
 							Issues: []github.Issue{},
 						}
-						mockSearchQuery(1).Return(searchResult, &github.Response{}, nil)
+						mockSearchQuery(1).Return(searchResult, &github.Response{}, noError)
 					})
 
 					It("returns 200 OK", func() {
@@ -136,7 +136,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							}},
 						}
-						mockSearchQuery(1).Return(searchResult, &github.Response{}, nil)
+						mockSearchQuery(1).Return(searchResult, &github.Response{}, noError)
 					})
 
 					ItMergesPR(context, userName, issueNumber)
@@ -161,13 +161,13 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							).
 							Return(&github.PullRequestMergeResult{
 								Merged: github.Bool(true),
-							}, nil, nil).
+							}, emptyResponse, noError).
 							Once()
 					}
 					expectLabelRemove := func(number int) {
 						issues.
 							On("RemoveLabelForIssue", repositoryOwner, repositoryName, number, grh.MergingLabel).
-							Return(nil, nil).
+							Return(emptyResponse, noError).
 							Once()
 
 					}
@@ -191,8 +191,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							}},
 						}
-						mockSearchQuery(1).Return(firstPageSearchResult, &github.Response{NextPage: 2}, nil)
-						mockSearchQuery(2).Return(secondPageSearchResult, &github.Response{}, nil)
+						mockSearchQuery(1).Return(firstPageSearchResult, &github.Response{NextPage: 2}, noError)
+						mockSearchQuery(2).Return(secondPageSearchResult, &github.Response{}, noError)
 					})
 
 					It("it merges both PRs and removes the 'merging' label from both PRs after the merge", func() {

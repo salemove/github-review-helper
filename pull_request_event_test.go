@@ -75,7 +75,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						resp, err := createGithubErrorResponse(http.StatusNotFound)
 						pullRequests.
 							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-							Return(nil, resp, err)
+							Return(emptyResult, resp, err)
 					})
 
 					It("fails with a gateway error", func() {
@@ -94,7 +94,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						pullRequests.
 							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-							Return(nil, nil, errors.New("an error"))
+							Return(emptyResult, emptyResponse, errors.New("an error"))
 					})
 
 					It("fails with a gateway error", func() {
@@ -124,7 +124,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 									Message: github.String("Another casual commit"),
 								},
 							},
-						}, &github.Response{}, nil)
+						}, emptyResponse, noError)
 				})
 
 				It("reports success status to GitHub", func() {
@@ -134,7 +134,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								return *status.State == "success" && *status.Context == "review/squash"
 							}),
 						).
-						Return(nil, nil, nil)
+						Return(emptyResult, emptyResponse, noError)
 
 					handle()
 
@@ -157,7 +157,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							},
 						}, &github.Response{
 							NextPage: 2,
-						}, nil)
+						}, noError)
 					pullRequests.
 						On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
 							Page:    2,
@@ -169,7 +169,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 									Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
 								},
 							},
-						}, &github.Response{}, nil)
+						}, &github.Response{}, noError)
 				})
 
 				It("reports pending squash status to GitHub", func() {
@@ -179,7 +179,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								return *status.State == "pending" && *status.Context == "review/squash"
 							}),
 						).
-						Return(nil, nil, nil)
+						Return(emptyResult, emptyResponse, noError)
 
 					handle()
 

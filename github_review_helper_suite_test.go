@@ -38,6 +38,9 @@ var (
 		Name:   github.String(repositoryName),
 		SSHURL: github.String(sshURL),
 	}
+	emptyResult   = (interface{})(nil)
+	emptyResponse = &github.Response{Response: &http.Response{}}
+	noError       = (error)(nil)
 )
 
 func TestGithubReviewHelper(t *testing.T) {
