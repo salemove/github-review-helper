@@ -59,3 +59,33 @@ func (_m *Issues) RemoveLabelForIssue(owner string, repo string, number int, lab
 
 	return r0, r1
 }
+func (_m *Issues) CreateComment(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error) {
+	ret := _m.Called(owner, repo, number, comment)
+
+	var r0 *github.IssueComment
+	if rf, ok := ret.Get(0).(func(string, string, int, *github.IssueComment) *github.IssueComment); ok {
+		r0 = rf(owner, repo, number, comment)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*github.IssueComment)
+		}
+	}
+
+	var r1 *github.Response
+	if rf, ok := ret.Get(1).(func(string, string, int, *github.IssueComment) *github.Response); ok {
+		r1 = rf(owner, repo, number, comment)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*github.Response)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(string, string, int, *github.IssueComment) error); ok {
+		r2 = rf(owner, repo, number, comment)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}

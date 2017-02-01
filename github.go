@@ -14,7 +14,7 @@ const (
 )
 
 var ErrNotMergeable = errors.New("PullRequests is not mergeable.")
-var ErrOutdatedMergeRef = errors.New("Merge failed because head branch has been modified.")
+var ErrMergeConflict = errors.New("Merge failed because of a merge conflict.")
 
 type PullRequests interface {
 	Get(owner, repo string, number int) (*github.PullRequest, *github.Response, error)
@@ -30,6 +30,11 @@ type Repositories interface {
 type Issues interface {
 	AddLabelsToIssue(owner, repo string, number int, labels []string) ([]*github.Label, *github.Response, error)
 	RemoveLabelForIssue(owner, repo string, number int, label string) (*github.Response, error)
+	CreateComment(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error)
+}
+
+type Search interface {
+	Issues(query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error)
 }
 
 func setStatusForPREvent(pullRequestEvent PullRequestEvent, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
@@ -103,6 +108,31 @@ func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []g
 	return state, statuses, nil
 }
 
+func searchIssues(query string, search Search) ([]github.Issue, error) {
+	pageNr := 1
+	issues := []github.Issue{}
+	for {
+		listOptions := github.ListOptions{
+			Page: pageNr,
+			// Max is 100: https://developer.github.com/v3/#pagination
+			PerPage: 100,
+		}
+		searchOptions := &github.SearchOptions{ListOptions: listOptions}
+
+		searchResult, resp, err := search.Issues(query, searchOptions)
+		if err != nil {
+			return nil, err
+		}
+
+		issues = append(issues, searchResult.Issues...)
+		if resp.NextPage == 0 {
+			break
+		}
+		pageNr = resp.NextPage
+	}
+	return issues, nil
+}
+
 func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest, *ErrorResponse) {
 	issue := issueable.Issue()
 	pr, _, err := pullRequests.Get(issue.Repository.Owner, issue.Repository.Name, issue.Number)
@@ -125,7 +155,7 @@ func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.Repos
 		}
 		pageCommits, resp, err := pullRequests.ListCommits(issue.Repository.Owner, issue.Repository.Name, issue.Number, listOptions)
 		if err != nil {
-			if is404Error(err) && nrOfRetriesLeft > 0 {
+			if is404Error(resp) && nrOfRetriesLeft > 0 {
 				log.Printf("Getting commits for PR %s failed with a 404: \"%s\". Trying again.\n", issue.FullName(), err.Error())
 				nrOfRetriesLeft = nrOfRetriesLeft - 1
 				continue
@@ -168,7 +198,7 @@ func merge(repository Repository, issueNumber int, pullRequests PullRequests) er
 		if resp != nil && resp.StatusCode == http.StatusMethodNotAllowed {
 			return ErrNotMergeable
 		} else if resp != nil && resp.StatusCode == http.StatusConflict {
-			return ErrOutdatedMergeRef
+			return ErrMergeConflict
 		}
 		return err
 	} else if result.Merged == nil || !*result.Merged {
@@ -177,10 +207,14 @@ func merge(repository Repository, issueNumber int, pullRequests PullRequests) er
 	return nil
 }
 
-func is404Error(err error) bool {
-	if errResp, ok := err.(*github.ErrorResponse); ok {
-		return errResp.Response.StatusCode == 404
+func comment(message string, repository Repository, issueNumber int, issues Issues) error {
+	issueComment := &github.IssueComment{
+		Body: github.String(message),
 	}
-	log.Println("Unable to cast the error to the expected type")
-	return false
+	_, _, err := issues.CreateComment(repository.Owner, repository.Name, issueNumber, issueComment)
+	return err
+}
+
+func is404Error(resp *github.Response) bool {
+	return resp != nil && resp.StatusCode == http.StatusNotFound
 }

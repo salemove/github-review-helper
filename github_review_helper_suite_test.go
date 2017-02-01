@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -22,10 +23,11 @@ import (
 )
 
 const (
-	repositoryOwner = "salemove"
-	repositoryName  = "github-review-helper"
-	sshURL          = "git@github.com:salemove/github-review-helper.git"
-	issueNumber     = 7
+	repositoryOwner      = "salemove"
+	repositoryName       = "github-review-helper"
+	sshURL               = "git@github.com:salemove/github-review-helper.git"
+	issueNumber          = 7
+	arbitraryIssueAuthor = "author"
 )
 
 var (
@@ -36,6 +38,9 @@ var (
 		Name:   github.String(repositoryName),
 		SSHURL: github.String(sshURL),
 	}
+	emptyResult   = (interface{})(nil)
+	emptyResponse = &github.Response{Response: &http.Response{}}
+	noError       = (error)(nil)
 )
 
 func TestGithubReviewHelper(t *testing.T) {
@@ -53,6 +58,7 @@ type WebhookTestContext struct {
 	PullRequests     **mocks.PullRequests
 	Repositories     **mocks.Repositories
 	Issues           **mocks.Issues
+	Search           **mocks.Search
 }
 
 type WebhookTest func(WebhookTestContext)
@@ -76,6 +82,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			pullRequests     = new(*mocks.PullRequests)
 			repositories     = new(*mocks.Repositories)
 			issues           = new(*mocks.Issues)
+			search           = new(*mocks.Search)
 		)
 
 		BeforeEach(func() {
@@ -83,13 +90,14 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			*pullRequests = new(mocks.PullRequests)
 			*repositories = new(mocks.Repositories)
 			*issues = new(mocks.Issues)
+			*search = new(mocks.Search)
 
 			*responseRecorder = httptest.NewRecorder()
 
 			conf = grh.Config{
 				Secret: "a-secret",
 			}
-			*handler = grh.CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues)
+			*handler = grh.CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues, *search)
 		})
 
 		JustBeforeEach(func() {
@@ -116,6 +124,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			(*pullRequests).AssertExpectations(GinkgoT())
 			(*repositories).AssertExpectations(GinkgoT())
 			(*issues).AssertExpectations(GinkgoT())
+			(*search).AssertExpectations(GinkgoT())
 		})
 
 		var handle = func() {
@@ -132,6 +141,7 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			PullRequests:     pullRequests,
 			Repositories:     repositories,
 			Issues:           issues,
+			Search:           search,
 		})
 	})
 
@@ -140,12 +150,15 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 	return true
 }
 
-var IssueCommentEvent = func(comment string) string {
+var IssueCommentEvent = func(comment, issueAuthor string) string {
 	return `{
   "issue": {
     "number": ` + strconv.Itoa(issueNumber) + `,
     "pull_request": {
       "url": "https://api.github.com/repos/` + repositoryOwner + `/` + repositoryName + `/pulls/` + strconv.Itoa(issueNumber) + `"
+    },
+    "user": {
+      "login": "` + issueAuthor + `"
     }
   },
   "comment": {
@@ -176,8 +189,41 @@ var PullRequestEvent = func(action, headSHA string, headRepository grh.Repositor
         },
         "ssh_url": "` + headRepository.URL + `"
       }
+    },
+    "user": {
+      "login": "` + arbitraryIssueAuthor + `"
     }
   },
+  "repository": {
+    "name": "` + repositoryName + `",
+    "owner": {
+      "login": "` + repositoryOwner + `"
+    },
+    "ssh_url": "` + sshURL + `"
+  }
+}`
+}
+
+var createStatusEvent = func(sha, state string, branches []grh.Branch) string {
+	branchSHAs := make([]string, len(branches))
+	for i, branch := range branches {
+		branchSHAs[i] = branch.SHA
+	}
+	return `{
+  "sha": "` + sha + `",
+  "state": "` + state + `",
+  "branches": [
+    {
+      "commit": {
+        "sha": "` + strings.Join(branchSHAs, `"
+      }
+    },
+    {
+      "commit": {
+        "sha": "`) + `"
+      }
+    }
+  ],
   "repository": {
     "name": "` + repositoryName + `",
     "owner": {

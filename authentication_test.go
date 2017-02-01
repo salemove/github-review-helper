@@ -96,7 +96,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				Context("with an arbitrary comment", func() {
 					requestJSON.Is(func() string {
-						return IssueCommentEvent("just a simple comment")
+						return IssueCommentEvent("just a simple comment", arbitraryIssueAuthor)
 					})
 
 					It("succeeds with 'ignored' response", func() {

@@ -34,14 +34,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			}
 		})
 		requestJSON.Is(func() string {
-			return IssueCommentEvent("!squash")
+			return IssueCommentEvent("!squash", arbitraryIssueAuthor)
 		})
 
 		Context("with GitHub request failing", func() {
 			BeforeEach(func() {
 				pullRequests.
 					On("Get", repositoryOwner, repositoryName, issueNumber).
-					Return(nil, nil, errors.New("an error"))
+					Return(emptyResult, emptyResponse, errors.New("an error"))
 			})
 
 			It("fails with a gateway error", func() {
@@ -68,7 +68,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			BeforeEach(func() {
 				pullRequests.
 					On("Get", repositoryOwner, repositoryName, issueNumber).
-					Return(pr, nil, nil)
+					Return(pr, emptyResponse, noError)
 			})
 
 			ItSquashesPR(context, pr)
@@ -98,7 +98,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 		gitRepo = new(mocks.Repo)
 		gitRepos.
 			On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).
-			Return(gitRepo, nil)
+			Return(gitRepo, noError)
 	})
 
 	AfterEach(func() {
@@ -117,7 +117,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 				On("CreateStatus", repositoryOwner, repositoryName, headSHA, mock.MatchedBy(func(status *github.RepoStatus) bool {
 					return *status.State == "failure" && *status.Context == "review/squash"
 				})).
-				Return(nil, nil, nil)
+				Return(emptyResult, emptyResponse, noError)
 
 			handle()
 
@@ -129,13 +129,13 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 		BeforeEach(func() {
 			gitRepo.
 				On("RebaseAutosquash", "origin/"+baseRef, headSHA).
-				Return(nil)
+				Return(noError)
 		})
 
 		It("pushes the squashed changes, reports status", func() {
 			gitRepo.
 				On("ForcePushHeadTo", headRef).
-				Return(nil)
+				Return(noError)
 
 			handle()
 		})

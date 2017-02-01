@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -14,9 +15,9 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = TestWebhookHandler(func(context WebhookTestContext) {
-	noSquashOpts := &github.PullRequestOptions{MergeMethod: "merge"}
+var noSquashOpts = &github.PullRequestOptions{MergeMethod: "merge"}
 
+var _ = TestWebhookHandler(func(context WebhookTestContext) {
 	Describe("!merge comment", func() {
 		var (
 			handle      = context.Handle
@@ -27,6 +28,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			pullRequests     *mocks.PullRequests
 			repositories     *mocks.Repositories
 			issues           *mocks.Issues
+
+			issueAuthor = "procoder"
 		)
 		BeforeEach(func() {
 			responseRecorder = *context.ResponseRecorder
@@ -41,14 +44,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			}
 		})
 		requestJSON.Is(func() string {
-			return IssueCommentEvent("!merge")
+			return IssueCommentEvent("!merge", issueAuthor)
 		})
 
 		Context("with github request to add the label failing", func() {
 			BeforeEach(func() {
 				issues.
 					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
-					Return(nil, nil, errors.New("an error"))
+					Return(emptyResult, emptyResponse, errors.New("an error"))
 			})
 
 			It("fails with a gateway error", func() {
@@ -61,14 +64,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			BeforeEach(func() {
 				issues.
 					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
-					Return(nil, nil, nil)
+					Return(emptyResult, emptyResponse, noError)
 			})
 
 			Context("with fetching the PR failing", func() {
 				BeforeEach(func() {
 					pullRequests.
 						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(nil, nil, errors.New("an error"))
+						Return(emptyResult, emptyResponse, errors.New("an error"))
 				})
 
 				It("fails with a gateway error", func() {
@@ -83,13 +86,13 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						On("Get", repositoryOwner, repositoryName, issueNumber).
 						Return(&github.PullRequest{
 							Merged: github.Bool(true),
-						}, nil, nil)
+						}, emptyResponse, noError)
 				})
 
 				It("removes the 'merging' label from the PR", func() {
 					issues.
 						On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
-						Return(nil, nil, nil)
+						Return(emptyResponse, noError)
 
 					handle()
 					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
@@ -103,7 +106,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						Return(&github.PullRequest{
 							Merged:    github.Bool(false),
 							Mergeable: github.Bool(false),
-						}, nil, nil)
+						}, emptyResponse, noError)
 				})
 
 				It("succeeds", func() {
@@ -133,7 +136,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				BeforeEach(func() {
 					pullRequests.
 						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(pr, nil, nil)
+						Return(pr, emptyResponse, noError)
 				})
 
 				Context("with combined state being failing", func() {
@@ -142,7 +145,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
 							Return(&github.CombinedStatus{
 								State: github.String("failing"),
-							}, &github.Response{}, nil)
+							}, emptyResponse, noError)
 					})
 
 					It("succeeds", func() {
@@ -168,7 +171,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							}, &github.Response{
 								NextPage: 2,
-							}, nil)
+							}, noError)
 						repositories.
 							On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
 								Page:    2,
@@ -182,7 +185,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 										State:   github.String("pending"),
 									},
 								},
-							}, &github.Response{}, nil)
+							}, &github.Response{}, noError)
 					})
 
 					ItSquashesPR(context, pr)
@@ -194,161 +197,187 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
 							Return(&github.CombinedStatus{
 								State: github.String("success"),
-							}, &github.Response{}, nil)
+							}, emptyResponse, noError)
 					})
 
-					Context("with merge failing with an unknown error", func() {
-						BeforeEach(func() {
-							additionalCommitMessage := ""
-							pullRequests.
-								On(
-									"Merge",
-									repositoryOwner,
-									repositoryName,
-									issueNumber,
-									additionalCommitMessage,
-									noSquashOpts,
-								).
-								Return(nil, nil, errors.New("an error")).
-								Once()
-						})
-
-						It("fails with a gateway error", func() {
-							handle()
-							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
-						})
-					})
-
-					Context("with head branch having changed", func() {
-						mockMergeFailWithConflict := func() *mock.Call {
-							additionalCommitMessage := ""
-							resp := &http.Response{
-								StatusCode: http.StatusConflict,
-							}
-							return pullRequests.
-								On(
-									"Merge",
-									repositoryOwner,
-									repositoryName,
-									issueNumber,
-									additionalCommitMessage,
-									noSquashOpts,
-								).
-								Return(nil, &github.Response{
-									Response: resp,
-								}, &github.ErrorResponse{
-									Response: resp,
-									Message:  "Head branch was modified. Review and try the merge again.",
-								})
-						}
-
-						Context("every time", func() {
-							BeforeEach(func() {
-								mockMergeFailWithConflict()
-							})
-
-							It("retries and fails with a gateway error", func() {
-								handle()
-
-								// +1 because of the initial attempt
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", grh.MergeRetryLimit+1)
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", grh.MergeRetryLimit+1)
-								Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
-							})
-						})
-
-						Context("with merge succeeding with first retry", func() {
-							BeforeEach(func() {
-								mockMergeFailWithConflict().Once()
-
-								additionalCommitMessage := ""
-								pullRequests.
-									On(
-										"Merge",
-										repositoryOwner,
-										repositoryName,
-										issueNumber,
-										additionalCommitMessage,
-										noSquashOpts,
-									).
-									Return(&github.PullRequestMergeResult{
-										Merged: github.Bool(true),
-									}, nil, nil).
-									Once()
-							})
-
-							It("removes the 'merging' label from the PR after the merge", func() {
-								issues.
-									On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
-									Return(nil, nil, nil)
-
-								handle()
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Get", 2)
-								pullRequests.AssertNumberOfCalls(GinkgoT(), "Merge", 2)
-								Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-							})
-						})
-					})
-
-					Context("with merge failing, because PR not mergeable", func() {
-						BeforeEach(func() {
-							additionalCommitMessage := ""
-							resp := &http.Response{
-								StatusCode: http.StatusMethodNotAllowed,
-							}
-							pullRequests.
-								On(
-									"Merge",
-									repositoryOwner,
-									repositoryName,
-									issueNumber,
-									additionalCommitMessage,
-									noSquashOpts,
-								).
-								Return(nil, &github.Response{
-									Response: resp,
-								}, &github.ErrorResponse{
-									Response: resp,
-									Message:  "Pull Request is not mergeable",
-								}).
-								Once()
-						})
-
-						It("fails with a gateway error", func() {
-							handle()
-							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
-						})
-					})
-
-					Context("with merge succeeding", func() {
-						BeforeEach(func() {
-							additionalCommitMessage := ""
-							pullRequests.
-								On(
-									"Merge",
-									repositoryOwner,
-									repositoryName,
-									issueNumber,
-									additionalCommitMessage,
-									noSquashOpts,
-								).
-								Return(&github.PullRequestMergeResult{
-									Merged: github.Bool(true),
-								}, nil, nil).
-								Once()
-						})
-
-						It("removes the 'merging' label from the PR after the merge", func() {
-							issues.
-								On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
-								Return(nil, nil, nil)
-
-							handle()
-							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-						})
-					})
+					ItMergesPR(context, issueAuthor, issueNumber)
 				})
 			})
 		})
 	})
 })
+
+var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumber int) {
+	var (
+		handle = context.Handle
+
+		responseRecorder *httptest.ResponseRecorder
+		pullRequests     *mocks.PullRequests
+		issues           *mocks.Issues
+	)
+	BeforeEach(func() {
+		responseRecorder = *context.ResponseRecorder
+		pullRequests = *context.PullRequests
+		issues = *context.Issues
+	})
+
+	Context("with merge failing with an unknown error", func() {
+		BeforeEach(func() {
+			additionalCommitMessage := ""
+			pullRequests.
+				On(
+					"Merge",
+					repositoryOwner,
+					repositoryName,
+					issueNumber,
+					additionalCommitMessage,
+					noSquashOpts,
+				).
+				Return(emptyResult, emptyResponse, errors.New("an error")).
+				Once()
+		})
+
+		It("fails with a gateway error", func() {
+			handle()
+			Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+		})
+	})
+
+	Context("with merge failing due to a merge conflict", func() {
+		mockMergeFailWithConflict := func() *mock.Call {
+			additionalCommitMessage := ""
+			resp := &http.Response{
+				StatusCode: http.StatusConflict,
+			}
+			return pullRequests.
+				On(
+					"Merge",
+					repositoryOwner,
+					repositoryName,
+					issueNumber,
+					additionalCommitMessage,
+					noSquashOpts,
+				).
+				Return(emptyResult, &github.Response{
+					Response: resp,
+				}, &github.ErrorResponse{
+					Response: resp,
+					Message:  "Merge conflict",
+				})
+		}
+
+		matchIssueCommentContainingAuthorMention := mock.MatchedBy(func(issueComment *github.IssueComment) bool {
+			return strings.Contains(*issueComment.Body, "@"+issueAuthor)
+		})
+
+		BeforeEach(func() {
+			mockMergeFailWithConflict()
+		})
+
+		Context("with removing the label failing", func() {
+			BeforeEach(func() {
+				issues.
+					On("RemoveLabelForIssue", repositoryOwner, repositoryName,
+						issueNumber, grh.MergingLabel).
+					Return(emptyResponse, errors.New("arbitrary error"))
+			})
+
+			It("notifies PR author and fails with a gateway error", func() {
+				issues.
+					On("CreateComment", repositoryOwner, repositoryName,
+						issueNumber, matchIssueCommentContainingAuthorMention).
+					Return(emptyResult, emptyResponse, noError)
+
+				handle()
+				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+			})
+
+			Context("with author notification failing", func() {
+				BeforeEach(func() {
+					issues.
+						On("CreateComment", repositoryOwner, repositoryName,
+							issueNumber, matchIssueCommentContainingAuthorMention).
+						Return(emptyResult, emptyResponse, errors.New("arbitrary error"))
+				})
+
+				It("fails with a gateway error", func() {
+					handle()
+					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				})
+			})
+		})
+
+		It("removes the 'merging' label and notifies the author", func() {
+			issues.
+				On("RemoveLabelForIssue", repositoryOwner, repositoryName,
+					issueNumber, grh.MergingLabel).
+				Return(emptyResponse, noError)
+			issues.
+				On("CreateComment", repositoryOwner, repositoryName,
+					issueNumber, matchIssueCommentContainingAuthorMention).
+				Return(emptyResult, emptyResponse, noError)
+
+			handle()
+
+			Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+		})
+	})
+
+	Context("with merge failing, because PR not mergeable", func() {
+		BeforeEach(func() {
+			additionalCommitMessage := ""
+			resp := &http.Response{
+				StatusCode: http.StatusMethodNotAllowed,
+			}
+			pullRequests.
+				On(
+					"Merge",
+					repositoryOwner,
+					repositoryName,
+					issueNumber,
+					additionalCommitMessage,
+					noSquashOpts,
+				).
+				Return(emptyResult, &github.Response{
+					Response: resp,
+				}, &github.ErrorResponse{
+					Response: resp,
+					Message:  "Pull Request is not mergeable",
+				}).
+				Once()
+		})
+
+		It("fails with a gateway error", func() {
+			handle()
+			Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+		})
+	})
+
+	Context("with merge succeeding", func() {
+		BeforeEach(func() {
+			additionalCommitMessage := ""
+			pullRequests.
+				On(
+					"Merge",
+					repositoryOwner,
+					repositoryName,
+					issueNumber,
+					additionalCommitMessage,
+					noSquashOpts,
+				).
+				Return(&github.PullRequestMergeResult{
+					Merged: github.Bool(true),
+				}, emptyResponse, noError).
+				Once()
+		})
+
+		It("removes the 'merging' label from the PR after the merge", func() {
+			issues.
+				On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+				Return(emptyResponse, noError)
+
+			handle()
+			Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+		})
+	})
+}
