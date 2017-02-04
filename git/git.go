@@ -12,7 +12,7 @@ import (
 )
 
 type Repos interface {
-	// GetUpdateRepo either clones the specified repository if it hasn't been cloned yet or simply
+	// GetUpdatedRepo either clones the specified repository if it hasn't been cloned yet or simply
 	// fetches the latest changes for it. Returns the Repo in any case.
 	GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error)
 }
@@ -112,7 +112,7 @@ func (r *repo) Fetch() error {
 	r.Lock()
 	defer r.Unlock()
 
-	if err := runWithLogging("git", "-C", r.path, "fetch"); err != nil {
+	if err := r.git("fetch"); err != nil {
 		return fmt.Errorf("failed to fetch: %v", err)
 	}
 	return nil
@@ -125,10 +125,10 @@ func (r *repo) rebaseAutosquash(upstreamRef, branchRef string) error {
 	}
 	defer os.Unsetenv("GIT_SEQUENCE_EDITOR")
 
-	if err := runWithLogging("git", "-C", r.path, "rebase", "--interactive", "--autosquash", upstreamRef, branchRef); err != nil {
+	if err := r.git("rebase", "--interactive", "--autosquash", upstreamRef, branchRef); err != nil {
 		err = &ErrSquashConflict{err}
 		log.Println(err, " Trying to clean up.")
-		if cleanupErr := runWithLogging("git", "-C", r.path, "rebase", "--abort"); cleanupErr != nil {
+		if cleanupErr := r.git("rebase", "--abort"); cleanupErr != nil {
 			log.Println("Also failed to clean up after the failed rebase: ", cleanupErr)
 		}
 		return err
@@ -137,10 +137,15 @@ func (r *repo) rebaseAutosquash(upstreamRef, branchRef string) error {
 }
 
 func (r *repo) forcePushHeadTo(destinationRef string) error {
-	if err := runWithLogging("git", "-C", r.path, "push", "--force", "origin", "@:"+destinationRef); err != nil {
+	if err := r.git("push", "--force", "origin", "@:"+destinationRef); err != nil {
 		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil
+}
+
+func (r *repo) git(args ...string) error {
+	allArgs := append([]string{"-C", r.path}, args...)
+	return runWithLogging("git", allArgs...)
 }
 
 func runWithLogging(name string, args ...string) error {
