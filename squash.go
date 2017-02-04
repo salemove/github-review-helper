@@ -10,7 +10,7 @@ import (
 	"github.com/salemove/github-review-helper/git"
 )
 
-var ErrRebase = errors.New("Rebase failed")
+var ErrSquashConflict = errors.New("Rebase failed due to a squash conflict")
 
 func isSquashCommand(comment string) bool {
 	return strings.TrimSpace(comment) == "!squash"
@@ -86,7 +86,7 @@ func createSquashStatus(state, description string) *github.RepoStatus {
 func squashAndReportFailure(pr *github.PullRequest, gitRepos git.Repos, repositories Repositories) Response {
 	log.Printf("Squashing %s that's going to be merged into %s\n", *pr.Head.Ref, *pr.Base.Ref)
 	err := squash(pr, gitRepos, repositories)
-	if err == ErrRebase {
+	if err == ErrSquashConflict {
 		log.Printf("Failed to autosquash the commits with an interactive rebase: %s. Setting a failure status.\n", err)
 		status := createSquashStatus("failure", "Automatic squash failed. Please squash manually")
 		if errResp := setStatusForPR(pr, status, repositories); errResp != nil {
@@ -108,7 +108,10 @@ func squash(pr *github.PullRequest, gitRepos git.Repos, repositories Repositorie
 	}
 	if err = gitRepo.RebaseAutosquash("origin/"+*pr.Base.Ref, *pr.Head.SHA); err != nil {
 		log.Println(err)
-		return ErrRebase
+		if _, ok := err.(*git.ErrSquashConflict); ok {
+			return ErrSquashConflict
+		}
+		return err
 	}
 	if err = gitRepo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
 		log.Println(err)

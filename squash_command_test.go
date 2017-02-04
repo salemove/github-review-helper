@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/google/go-github/github"
+	"github.com/salemove/github-review-helper/git"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
 
@@ -105,11 +106,11 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 		gitRepo.AssertExpectations(GinkgoT())
 	})
 
-	Context("with autosquash failing", func() {
+	Context("with autosquash failing because of a squash conflict", func() {
 		BeforeEach(func() {
 			gitRepo.
 				On("RebaseAutosquash", "origin/"+baseRef, headSHA).
-				Return(errors.New("merge conflict"))
+				Return(&git.ErrSquashConflict{errors.New("merge conflict")})
 		})
 
 		It("reports the failure", func() {
@@ -122,6 +123,20 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 			handle()
 
 			Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+		})
+	})
+
+	Context("with autosquash failing for a different reason", func() {
+		BeforeEach(func() {
+			gitRepo.
+				On("RebaseAutosquash", "origin/"+baseRef, headSHA).
+				Return(errors.New("other git error"))
+		})
+
+		It("responds with an internal server error", func() {
+			handle()
+
+			Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError))
 		})
 	})
 
@@ -138,6 +153,8 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 				Return(noError)
 
 			handle()
+
+			Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 		})
 	})
 }

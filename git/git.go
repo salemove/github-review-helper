@@ -25,6 +25,14 @@ type Repo interface {
 	ForcePushHeadTo(remoteRef string) error
 }
 
+type ErrSquashConflict struct {
+	Err error
+}
+
+func (e *ErrSquashConflict) Error() string {
+	return fmt.Sprintf("failed to rebase with autosquash: %v", e.Err)
+}
+
 type repos struct {
 	sync.Mutex
 	basePath string
@@ -102,7 +110,7 @@ func (r *repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 	defer os.Unsetenv("GIT_SEQUENCE_EDITOR")
 
 	if err := runWithLogging("git", "-C", r.path, "rebase", "--interactive", "--autosquash", upstreamRef, branchRef); err != nil {
-		err = fmt.Errorf("failed to rebase: %v", err)
+		err = &ErrSquashConflict{err}
 		log.Println(err, " Trying to clean up.")
 		if cleanupErr := runWithLogging("git", "-C", r.path, "rebase", "--abort"); cleanupErr != nil {
 			log.Println("Also failed to clean up after the failed rebase: ", cleanupErr)
