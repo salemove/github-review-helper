@@ -20,9 +20,8 @@ type Repos interface {
 type Repo interface {
 	Fetch() error
 	// Runs `git rebase --interactive --autosquash` for the given refs and automatically saves and closes
-	// the editor for interactive rebase.
-	RebaseAutosquash(upstreamRef, branchRef string) error
-	ForcePushHeadTo(remoteRef string) error
+	// the editor for interactive rebase. Then force pushes the current HEAD to destinationRef on origin.
+	AutosquashAndPush(upstreamRef, branchRef, destinationRef string) error
 }
 
 type ErrSquashConflict struct {
@@ -99,10 +98,27 @@ type repo struct {
 	path string
 }
 
-func (r *repo) RebaseAutosquash(upstreamRef, branchRef string) error {
+func (r *repo) AutosquashAndPush(upstreamRef, branchRef, destinationRef string) error {
 	r.Lock()
 	defer r.Unlock()
 
+	if err := r.rebaseAutosquash(upstreamRef, branchRef); err != nil {
+		return err
+	}
+	return r.forcePushHeadTo(destinationRef)
+}
+
+func (r *repo) Fetch() error {
+	r.Lock()
+	defer r.Unlock()
+
+	if err := runWithLogging("git", "-C", r.path, "fetch"); err != nil {
+		return fmt.Errorf("failed to fetch: %v", err)
+	}
+	return nil
+}
+
+func (r *repo) rebaseAutosquash(upstreamRef, branchRef string) error {
 	// This makes the --interactive rebase not actually interactive
 	if err := os.Setenv("GIT_SEQUENCE_EDITOR", "true"); err != nil {
 		return fmt.Errorf("failed to change the env variable: %v", err)
@@ -120,21 +136,8 @@ func (r *repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 	return nil
 }
 
-func (r *repo) Fetch() error {
-	r.Lock()
-	defer r.Unlock()
-
-	if err := runWithLogging("git", "-C", r.path, "fetch"); err != nil {
-		return fmt.Errorf("failed to fetch: %v", err)
-	}
-	return nil
-}
-
-func (r *repo) ForcePushHeadTo(remoteRef string) error {
-	r.Lock()
-	defer r.Unlock()
-
-	if err := runWithLogging("git", "-C", r.path, "push", "--force", "origin", "@:"+remoteRef); err != nil {
+func (r *repo) forcePushHeadTo(destinationRef string) error {
+	if err := runWithLogging("git", "-C", r.path, "push", "--force", "origin", "@:"+destinationRef); err != nil {
 		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil

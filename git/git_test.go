@@ -66,9 +66,7 @@ func TestSquash(t *testing.T) {
 	gitRepos := git.NewRepos(reposDir)
 	repo, err := gitRepos.GetUpdatedRepo(testRepoDir, "my", "test-repo")
 	checkError(t, err)
-	err = repo.RebaseAutosquash("origin/master", "origin/"+featureBranchName)
-	checkError(t, err)
-	err = repo.ForcePushHeadTo(featureBranchName)
+	err = repo.AutosquashAndPush("origin/master", "origin/"+featureBranchName, featureBranchName)
 	checkError(t, err)
 
 	// Check that all files still exist in the feature branch and that the

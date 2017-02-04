@@ -106,16 +106,12 @@ func squash(pr *github.PullRequest, gitRepos git.Repos, repositories Repositorie
 		log.Println(err)
 		return errors.New("Failed to update the local repo")
 	}
-	if err = gitRepo.RebaseAutosquash("origin/"+*pr.Base.Ref, *pr.Head.SHA); err != nil {
+	if err = gitRepo.AutosquashAndPush("origin/"+*pr.Base.Ref, *pr.Head.SHA, *pr.Head.Ref); err != nil {
 		log.Println(err)
 		if _, ok := err.(*git.ErrSquashConflict); ok {
 			return ErrSquashConflict
 		}
 		return err
-	}
-	if err = gitRepo.ForcePushHeadTo(*pr.Head.Ref); err != nil {
-		log.Println(err)
-		return errors.New("Failed to push the squashed version")
 	}
 	return nil
 }
