@@ -46,7 +46,7 @@ func NewRepos(basePath string) Repos {
 	}
 }
 
-func (g *repos) repo(path string) Repo {
+func (g *repos) repo(path string) *repo {
 	existingRepo, exists := g.repos[path]
 	if !exists {
 		newRepo := &repo{path: path}
@@ -60,7 +60,11 @@ func (g *repos) clone(url, localPath string) (Repo, error) {
 	if err := runWithLogging("git", "clone", url, localPath); err != nil {
 		return nil, fmt.Errorf("failed to clone: %v", err)
 	}
-	return g.repo(localPath), nil
+	newRepo := g.repo(localPath)
+	if err := newRepo.configureNameEmail(); err != nil {
+		return nil, fmt.Errorf("failed to configure name and email: %v", err)
+	}
+	return newRepo, nil
 }
 
 func (g *repos) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
@@ -141,6 +145,13 @@ func (r *repo) forcePushHeadTo(destinationRef string) error {
 		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil
+}
+
+func (r *repo) configureNameEmail() error {
+	if err := r.git("config", "user.name", "github-review-helper"); err != nil {
+		return err
+	}
+	return r.git("config", "user.email", "<>")
 }
 
 func (r *repo) git(args ...string) error {

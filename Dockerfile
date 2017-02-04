@@ -6,9 +6,7 @@ EXPOSE $PORT
 RUN echo "\
     UserKnownHostsFile /etc/secret-volume/known_hosts\n\
     IdentityFile /etc/secret-volume/id_rsa\n\
-" >> /etc/ssh/ssh_config && \
-  git config --global user.name 'github-review-helper' && \
-  git config --global user.email '<>'
+" >> /etc/ssh/ssh_config
 
 ADD . /go/src/github.com/salemove/github-review-helper
 RUN go get -v -d github.com/salemove/github-review-helper && \

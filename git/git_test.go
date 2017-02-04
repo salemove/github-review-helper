@@ -39,6 +39,9 @@ func TestSquash(t *testing.T) {
 	testRepoGit := gitForPath(t, testRepoDir)
 
 	testRepoGit("init")
+	// Configure username and email that are required for creating commits
+	testRepoGit("config", "user.name", "git-test")
+	testRepoGit("config", "user.email", "<>")
 	createFile(t, testRepoDir, readme)
 	testRepoGit("add", readme.Name)
 	testRepoGit("commit", "-m", "Init with foo")
