@@ -10,6 +10,7 @@ import (
 	"gopkg.in/tylerb/graceful.v1"
 
 	"github.com/google/go-github/github"
+	"github.com/gregjones/httpcache"
 	"github.com/salemove/github-review-helper/git"
 	"golang.org/x/oauth2"
 )
@@ -106,9 +107,19 @@ func handleStatusEvent(body []byte, search Search, issues Issues, pullRequests P
 }
 
 func initGithubClient(accessToken string) *github.Client {
-	ts := oauth2.StaticTokenSource(
+	tokenSource := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: accessToken},
 	)
-	tc := oauth2.NewClient(oauth2.NoContext, ts)
-	return github.NewClient(tc)
+	oauthTransport := &oauth2.Transport{
+		Source: tokenSource,
+	}
+
+	memoryCacheTransport := &httpcache.Transport{
+		Transport:           oauthTransport,
+		Cache:               httpcache.NewMemoryCache(),
+		MarkCachedResponses: true,
+	}
+
+	httpClient := &http.Client{Transport: memoryCacheTransport}
+	return github.NewClient(httpClient)
 }
