@@ -120,6 +120,9 @@ func initGithubClient(accessToken string) *github.Client {
 		MarkCachedResponses: true,
 	}
 
-	httpClient := &http.Client{Transport: memoryCacheTransport}
+	httpClient := &http.Client{
+		Transport: memoryCacheTransport,
+		Timeout:   30 * time.Second,
+	}
 	return github.NewClient(httpClient)
 }
