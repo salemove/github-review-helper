@@ -75,15 +75,22 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 	if !issueComment.IsPullRequest {
 		return SuccessResponse{"Not a PR. Ignoring."}
 	}
-	switch {
-	case isSquashCommand(issueComment.Comment):
+	commentCategory := parseComment(issueComment.Comment)
+	if commentCategory == regularComment {
+		return SuccessResponse{"Not a command I understand. Ignoring."}
+	}
+	switch commentCategory {
+	case squashCommand:
 		return handleSquashCommand(issueComment, gitRepos, pullRequests, repositories)
-	case isMergeCommand(issueComment.Comment):
+	case mergeCommand:
 		return handleMergeCommand(issueComment, issues, pullRequests, repositories, gitRepos)
-	case isCheckCommand(issueComment.Comment):
+	case checkCommand:
 		return checkForFixupCommitsOnIssueComment(issueComment, pullRequests, repositories)
 	}
-	return SuccessResponse{"Not a command I understand. Ignoring."}
+	return ErrorResponse{
+		Code:         http.StatusInternalServerError,
+		ErrorMessage: fmt.Sprintf("Unhandled comment type: %v", commentCategory),
+	}
 }
 
 func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories Repositories) Response {
@@ -125,4 +132,25 @@ func initGithubClient(accessToken string) *github.Client {
 		Timeout:   30 * time.Second,
 	}
 	return github.NewClient(httpClient)
+}
+
+type commentType int
+
+const (
+	squashCommand commentType = iota
+	mergeCommand
+	checkCommand
+	regularComment
+)
+
+func parseComment(comment string) commentType {
+	switch {
+	case isSquashCommand(comment):
+		return squashCommand
+	case isMergeCommand(comment):
+		return mergeCommand
+	case isCheckCommand(comment):
+		return checkCommand
+	}
+	return regularComment
 }
