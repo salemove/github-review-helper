@@ -207,6 +207,12 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 	})
 })
 
+func commentMentioning(user string) func(issueComment *github.IssueComment) bool {
+	return func(issueComment *github.IssueComment) bool {
+		return strings.Contains(*issueComment.Body, "@"+user)
+	}
+}
+
 var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumber int) {
 	var (
 		handle = context.Handle
@@ -266,10 +272,6 @@ var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumbe
 				})
 		}
 
-		matchIssueCommentContainingAuthorMention := mock.MatchedBy(func(issueComment *github.IssueComment) bool {
-			return strings.Contains(*issueComment.Body, "@"+issueAuthor)
-		})
-
 		BeforeEach(func() {
 			mockMergeFailWithConflict()
 		})
@@ -285,7 +287,7 @@ var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumbe
 			It("notifies PR author and fails with a gateway error", func() {
 				issues.
 					On("CreateComment", repositoryOwner, repositoryName,
-						issueNumber, matchIssueCommentContainingAuthorMention).
+						issueNumber, mock.MatchedBy(commentMentioning(issueAuthor))).
 					Return(emptyResult, emptyResponse, noError)
 
 				handle()
@@ -296,7 +298,7 @@ var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumbe
 				BeforeEach(func() {
 					issues.
 						On("CreateComment", repositoryOwner, repositoryName,
-							issueNumber, matchIssueCommentContainingAuthorMention).
+							issueNumber, mock.MatchedBy(commentMentioning(issueAuthor))).
 						Return(emptyResult, emptyResponse, errors.New("arbitrary error"))
 				})
 
@@ -314,7 +316,7 @@ var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumbe
 				Return(emptyResponse, noError)
 			issues.
 				On("CreateComment", repositoryOwner, repositoryName,
-					issueNumber, matchIssueCommentContainingAuthorMention).
+					issueNumber, mock.MatchedBy(commentMentioning(issueAuthor))).
 				Return(emptyResult, emptyResponse, noError)
 
 			handle()
