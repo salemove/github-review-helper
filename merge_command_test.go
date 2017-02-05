@@ -47,30 +47,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			return IssueCommentEvent("!merge", issueAuthor)
 		})
 
-		Context("with github request to add the label failing", func() {
-			BeforeEach(func() {
-				issues.
-					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
-					Return(emptyResult, emptyResponse, errors.New("an error"))
-			})
-
-			It("fails with a gateway error", func() {
-				handle()
-				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
-			})
-		})
-
-		Context("with github request to add the label succeeding", func() {
-			BeforeEach(func() {
-				issues.
-					On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
-					Return(emptyResult, emptyResponse, noError)
-			})
-
-			Context("with fetching the PR failing", func() {
+		ForCollaborator(context, repositoryOwner, repositoryName, issueAuthor, func() {
+			Context("with github request to add the label failing", func() {
 				BeforeEach(func() {
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
+					issues.
+						On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
 						Return(emptyResult, emptyResponse, errors.New("an error"))
 				})
 
@@ -80,71 +61,52 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				})
 			})
 
-			Context("with the PR being already merged", func() {
+			Context("with github request to add the label succeeding", func() {
 				BeforeEach(func() {
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(&github.PullRequest{
-							Merged: github.Bool(true),
-						}, emptyResponse, noError)
-				})
-
-				It("removes the 'merging' label from the PR", func() {
 					issues.
-						On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
-						Return(emptyResponse, noError)
-
-					handle()
-					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-				})
-			})
-
-			Context("with the PR not being mergeable", func() {
-				BeforeEach(func() {
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(&github.PullRequest{
-							Merged:    github.Bool(false),
-							Mergeable: github.Bool(false),
-						}, emptyResponse, noError)
+						On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
+						Return(emptyResult, emptyResponse, noError)
 				})
 
-				It("succeeds", func() {
-					handle()
-					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-				})
-			})
-
-			Context("with the PR being mergeable", func() {
-				headSHA := "1235"
-				pr := &github.PullRequest{
-					Number:    github.Int(issueNumber),
-					Merged:    github.Bool(false),
-					Mergeable: github.Bool(true),
-					Base: &github.PullRequestBranch{
-						SHA:  github.String("1234"),
-						Ref:  github.String("master"),
-						Repo: repository,
-					},
-					Head: &github.PullRequestBranch{
-						SHA:  github.String(headSHA),
-						Ref:  github.String("feature"),
-						Repo: repository,
-					},
-				}
-
-				BeforeEach(func() {
-					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
-						Return(pr, emptyResponse, noError)
-				})
-
-				Context("with combined state being failing", func() {
+				Context("with fetching the PR failing", func() {
 					BeforeEach(func() {
-						repositories.
-							On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
-							Return(&github.CombinedStatus{
-								State: github.String("failing"),
+						pullRequests.
+							On("Get", repositoryOwner, repositoryName, issueNumber).
+							Return(emptyResult, emptyResponse, errors.New("an error"))
+					})
+
+					It("fails with a gateway error", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					})
+				})
+
+				Context("with the PR being already merged", func() {
+					BeforeEach(func() {
+						pullRequests.
+							On("Get", repositoryOwner, repositoryName, issueNumber).
+							Return(&github.PullRequest{
+								Merged: github.Bool(true),
+							}, emptyResponse, noError)
+					})
+
+					It("removes the 'merging' label from the PR", func() {
+						issues.
+							On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+							Return(emptyResponse, noError)
+
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					})
+				})
+
+				Context("with the PR not being mergeable", func() {
+					BeforeEach(func() {
+						pullRequests.
+							On("Get", repositoryOwner, repositoryName, issueNumber).
+							Return(&github.PullRequest{
+								Merged:    github.Bool(false),
+								Mergeable: github.Bool(false),
 							}, emptyResponse, noError)
 					})
 
@@ -154,53 +116,93 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					})
 				})
 
-				Context("with a pending squash status in paged combined status request", func() {
+				Context("with the PR being mergeable", func() {
+					headSHA := "1235"
+					pr := &github.PullRequest{
+						Number:    github.Int(issueNumber),
+						Merged:    github.Bool(false),
+						Mergeable: github.Bool(true),
+						Base: &github.PullRequestBranch{
+							SHA:  github.String("1234"),
+							Ref:  github.String("master"),
+							Repo: repository,
+						},
+						Head: &github.PullRequestBranch{
+							SHA:  github.String(headSHA),
+							Ref:  github.String("feature"),
+							Repo: repository,
+						},
+					}
+
 					BeforeEach(func() {
-						repositories.
-							On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
-								Page:    1,
-								PerPage: 100,
-							}).
-							Return(&github.CombinedStatus{
-								State: github.String("pending"),
-								Statuses: []github.RepoStatus{
-									github.RepoStatus{
-										Context: github.String("jenkins/pr"),
-										State:   github.String("success"),
-									},
-								},
-							}, &github.Response{
-								NextPage: 2,
-							}, noError)
-						repositories.
-							On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
-								Page:    2,
-								PerPage: 100,
-							}).
-							Return(&github.CombinedStatus{
-								State: github.String("pending"),
-								Statuses: []github.RepoStatus{
-									github.RepoStatus{
-										Context: github.String("review/squash"),
-										State:   github.String("pending"),
-									},
-								},
-							}, &github.Response{}, noError)
+						pullRequests.
+							On("Get", repositoryOwner, repositoryName, issueNumber).
+							Return(pr, emptyResponse, noError)
 					})
 
-					ItSquashesPR(context, pr)
-				})
+					Context("with combined state being failing", func() {
+						BeforeEach(func() {
+							repositories.
+								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
+								Return(&github.CombinedStatus{
+									State: github.String("failing"),
+								}, emptyResponse, noError)
+						})
 
-				Context("with combined state being success", func() {
-					BeforeEach(func() {
-						repositories.
-							On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
-							Return(&github.CombinedStatus{
-								State: github.String("success"),
-							}, emptyResponse, noError)
+						It("succeeds", func() {
+							handle()
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						})
 					})
 
-					ItMergesPR(context, issueAuthor, issueNumber)
+					Context("with a pending squash status in paged combined status request", func() {
+						BeforeEach(func() {
+							repositories.
+								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
+									Page:    1,
+									PerPage: 100,
+								}).
+								Return(&github.CombinedStatus{
+									State: github.String("pending"),
+									Statuses: []github.RepoStatus{
+										github.RepoStatus{
+											Context: github.String("jenkins/pr"),
+											State:   github.String("success"),
+										},
+									},
+								}, &github.Response{
+									NextPage: 2,
+								}, noError)
+							repositories.
+								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
+									Page:    2,
+									PerPage: 100,
+								}).
+								Return(&github.CombinedStatus{
+									State: github.String("pending"),
+									Statuses: []github.RepoStatus{
+										github.RepoStatus{
+											Context: github.String("review/squash"),
+											State:   github.String("pending"),
+										},
+									},
+								}, &github.Response{}, noError)
+						})
+
+						ItSquashesPR(context, pr)
+					})
+
+					Context("with combined state being success", func() {
+						BeforeEach(func() {
+							repositories.
+								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
+								Return(&github.CombinedStatus{
+									State: github.String("success"),
+								}, emptyResponse, noError)
+						})
+
+						ItMergesPR(context, issueAuthor, issueNumber)
+					})
 				})
 			})
 		})

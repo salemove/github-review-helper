@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -41,6 +42,7 @@ var (
 	emptyResult   = (interface{})(nil)
 	emptyResponse = &github.Response{Response: &http.Response{}}
 	noError       = (error)(nil)
+	errArbitrary  = errors.New("GitHub is down. Or something.")
 )
 
 func TestGithubReviewHelper(t *testing.T) {

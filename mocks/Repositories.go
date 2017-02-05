@@ -68,3 +68,31 @@ func (_m *Repositories) GetCombinedStatus(owner string, repo string, ref string,
 
 	return r0, r1, r2
 }
+func (_m *Repositories) IsCollaborator(owner string, repo string, user string) (bool, *github.Response, error) {
+	ret := _m.Called(owner, repo, user)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(string, string, string) bool); ok {
+		r0 = rf(owner, repo, user)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 *github.Response
+	if rf, ok := ret.Get(1).(func(string, string, string) *github.Response); ok {
+		r1 = rf(owner, repo, user)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*github.Response)
+		}
+	}
+
+	var r2 error
+	if rf, ok := ret.Get(2).(func(string, string, string) error); ok {
+		r2 = rf(owner, repo, user)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}

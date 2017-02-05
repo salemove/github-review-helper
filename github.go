@@ -25,6 +25,7 @@ type PullRequests interface {
 type Repositories interface {
 	CreateStatus(owner, repo, ref string, status *github.RepoStatus) (*github.RepoStatus, *github.Response, error)
 	GetCombinedStatus(owner, repo, ref string, opt *github.ListOptions) (*github.CombinedStatus, *github.Response, error)
+	IsCollaborator(owner, repo, user string) (bool, *github.Response, error)
 }
 
 type Issues interface {
@@ -213,6 +214,11 @@ func comment(message string, repository Repository, issueNumber int, issues Issu
 	}
 	_, _, err := issues.CreateComment(repository.Owner, repository.Name, issueNumber, issueComment)
 	return err
+}
+
+func isCollaborator(repository Repository, user User, repositories Repositories) (bool, error) {
+	isCollab, _, err := repositories.IsCollaborator(repository.Owner, repository.Name, user.Login)
+	return isCollab, err
 }
 
 func is404Error(resp *github.Response) bool {

@@ -79,6 +79,11 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 	if commentCategory == regularComment {
 		return SuccessResponse{"Not a command I understand. Ignoring."}
 	}
+	if successResp, errResp := checkUserAuthorization(issueComment, issues, repositories); errResp != nil {
+		return errResp
+	} else if successResp != nil {
+		return successResp
+	}
 	switch commentCategory {
 	case squashCommand:
 		return handleSquashCommand(issueComment, gitRepos, pullRequests, repositories)
@@ -153,4 +158,23 @@ func parseComment(comment string) commentType {
 		return checkCommand
 	}
 	return regularComment
+}
+
+func checkUserAuthorization(issueComment IssueComment, issues Issues, repositories Repositories) (*SuccessResponse, *ErrorResponse) {
+	if isAuthorized, err := isCollaborator(issueComment.Repository, issueComment.User, repositories); err != nil {
+		return nil, &ErrorResponse{err, http.StatusBadGateway, "Failed to check if the user is authorized to issue the command"}
+	} else if !isAuthorized {
+		err = comment(
+			fmt.Sprintf("I'm sorry, @%s. I'm afraid I can't do that.", issueComment.User.Login),
+			issueComment.Repository,
+			issueComment.IssueNumber,
+			issues,
+		)
+		if err != nil {
+			return nil, &ErrorResponse{err, http.StatusBadGateway, "Failed to respond to unauthorized command"}
+		}
+		return &SuccessResponse{"Command issued by a someone who's not a collaborator." +
+			" Responded with a comment. Ignoring the command."}, nil
+	}
+	return nil, nil
 }

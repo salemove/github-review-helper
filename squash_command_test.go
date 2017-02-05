@@ -37,41 +37,43 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			return IssueCommentEvent("!squash", arbitraryIssueAuthor)
 		})
 
-		Context("with GitHub request failing", func() {
-			BeforeEach(func() {
-				pullRequests.
-					On("Get", repositoryOwner, repositoryName, issueNumber).
-					Return(emptyResult, emptyResponse, errors.New("an error"))
+		ForCollaborator(context, repositoryOwner, repositoryName, arbitraryIssueAuthor, func() {
+			Context("with GitHub request failing", func() {
+				BeforeEach(func() {
+					pullRequests.
+						On("Get", repositoryOwner, repositoryName, issueNumber).
+						Return(emptyResult, emptyResponse, errors.New("an error"))
+				})
+
+				It("fails with a gateway error", func() {
+					handle()
+					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				})
 			})
 
-			It("fails with a gateway error", func() {
-				handle()
-				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+			Context("with GitHub request succeeding", func() {
+				pr := &github.PullRequest{
+					Number: github.Int(issueNumber),
+					Base: &github.PullRequestBranch{
+						SHA:  github.String("1234"),
+						Ref:  github.String("master"),
+						Repo: repository,
+					},
+					Head: &github.PullRequestBranch{
+						SHA:  github.String("1235"),
+						Ref:  github.String("feature"),
+						Repo: repository,
+					},
+				}
+
+				BeforeEach(func() {
+					pullRequests.
+						On("Get", repositoryOwner, repositoryName, issueNumber).
+						Return(pr, emptyResponse, noError)
+				})
+
+				ItSquashesPR(context, pr)
 			})
-		})
-
-		Context("with GitHub request succeeding", func() {
-			pr := &github.PullRequest{
-				Number: github.Int(issueNumber),
-				Base: &github.PullRequestBranch{
-					SHA:  github.String("1234"),
-					Ref:  github.String("master"),
-					Repo: repository,
-				},
-				Head: &github.PullRequestBranch{
-					SHA:  github.String("1235"),
-					Ref:  github.String("feature"),
-					Repo: repository,
-				},
-			}
-
-			BeforeEach(func() {
-				pullRequests.
-					On("Get", repositoryOwner, repositoryName, issueNumber).
-					Return(pr, emptyResponse, noError)
-			})
-
-			ItSquashesPR(context, pr)
 		})
 	})
 })
