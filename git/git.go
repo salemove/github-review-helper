@@ -12,7 +12,7 @@ import (
 )
 
 type Repos interface {
-	// GetUpdateRepo either clones the specified repository if it hasn't been cloned yet or simply
+	// GetUpdatedRepo either clones the specified repository if it hasn't been cloned yet or simply
 	// fetches the latest changes for it. Returns the Repo in any case.
 	GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error)
 }
@@ -20,9 +20,16 @@ type Repos interface {
 type Repo interface {
 	Fetch() error
 	// Runs `git rebase --interactive --autosquash` for the given refs and automatically saves and closes
-	// the editor for interactive rebase.
-	RebaseAutosquash(upstreamRef, branchRef string) error
-	ForcePushHeadTo(remoteRef string) error
+	// the editor for interactive rebase. Then force pushes the current HEAD to destinationRef on origin.
+	AutosquashAndPush(upstreamRef, branchRef, destinationRef string) error
+}
+
+type ErrSquashConflict struct {
+	Err error
+}
+
+func (e *ErrSquashConflict) Error() string {
+	return fmt.Sprintf("failed to rebase with autosquash: %v", e.Err)
 }
 
 type repos struct {
@@ -39,7 +46,7 @@ func NewRepos(basePath string) Repos {
 	}
 }
 
-func (g *repos) repo(path string) Repo {
+func (g *repos) repo(path string) *repo {
 	existingRepo, exists := g.repos[path]
 	if !exists {
 		newRepo := &repo{path: path}
@@ -53,7 +60,11 @@ func (g *repos) clone(url, localPath string) (Repo, error) {
 	if err := runWithLogging("git", "clone", url, localPath); err != nil {
 		return nil, fmt.Errorf("failed to clone: %v", err)
 	}
-	return g.repo(localPath), nil
+	newRepo := g.repo(localPath)
+	if err := newRepo.configureNameEmail(); err != nil {
+		return nil, fmt.Errorf("failed to configure name and email: %v", err)
+	}
+	return newRepo, nil
 }
 
 func (g *repos) GetUpdatedRepo(url, repoOwner, repoName string) (Repo, error) {
@@ -91,20 +102,37 @@ type repo struct {
 	path string
 }
 
-func (r *repo) RebaseAutosquash(upstreamRef, branchRef string) error {
+func (r *repo) AutosquashAndPush(upstreamRef, branchRef, destinationRef string) error {
 	r.Lock()
 	defer r.Unlock()
 
+	if err := r.rebaseAutosquash(upstreamRef, branchRef); err != nil {
+		return err
+	}
+	return r.forcePushHeadTo(destinationRef)
+}
+
+func (r *repo) Fetch() error {
+	r.Lock()
+	defer r.Unlock()
+
+	if err := r.git("fetch"); err != nil {
+		return fmt.Errorf("failed to fetch: %v", err)
+	}
+	return nil
+}
+
+func (r *repo) rebaseAutosquash(upstreamRef, branchRef string) error {
 	// This makes the --interactive rebase not actually interactive
 	if err := os.Setenv("GIT_SEQUENCE_EDITOR", "true"); err != nil {
 		return fmt.Errorf("failed to change the env variable: %v", err)
 	}
 	defer os.Unsetenv("GIT_SEQUENCE_EDITOR")
 
-	if err := runWithLogging("git", "-C", r.path, "rebase", "--interactive", "--autosquash", upstreamRef, branchRef); err != nil {
-		err = fmt.Errorf("failed to rebase: %v", err)
+	if err := r.git("rebase", "--interactive", "--autosquash", upstreamRef, branchRef); err != nil {
+		err = &ErrSquashConflict{err}
 		log.Println(err, " Trying to clean up.")
-		if cleanupErr := runWithLogging("git", "-C", r.path, "rebase", "--abort"); cleanupErr != nil {
+		if cleanupErr := r.git("rebase", "--abort"); cleanupErr != nil {
 			log.Println("Also failed to clean up after the failed rebase: ", cleanupErr)
 		}
 		return err
@@ -112,24 +140,23 @@ func (r *repo) RebaseAutosquash(upstreamRef, branchRef string) error {
 	return nil
 }
 
-func (r *repo) Fetch() error {
-	r.Lock()
-	defer r.Unlock()
-
-	if err := runWithLogging("git", "-C", r.path, "fetch"); err != nil {
-		return fmt.Errorf("failed to fetch: %v", err)
+func (r *repo) forcePushHeadTo(destinationRef string) error {
+	if err := r.git("push", "--force", "origin", "@:"+destinationRef); err != nil {
+		return fmt.Errorf("failed to force push to remote: %v", err)
 	}
 	return nil
 }
 
-func (r *repo) ForcePushHeadTo(remoteRef string) error {
-	r.Lock()
-	defer r.Unlock()
-
-	if err := runWithLogging("git", "-C", r.path, "push", "--force", "origin", "@:"+remoteRef); err != nil {
-		return fmt.Errorf("failed to force push to remote: %v", err)
+func (r *repo) configureNameEmail() error {
+	if err := r.git("config", "user.name", "github-review-helper"); err != nil {
+		return err
 	}
-	return nil
+	return r.git("config", "user.email", "<>")
+}
+
+func (r *repo) git(args ...string) error {
+	allArgs := append([]string{"-C", r.path}, args...)
+	return runWithLogging("git", allArgs...)
 }
 
 func runWithLogging(name string, args ...string) error {
