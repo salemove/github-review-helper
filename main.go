@@ -75,15 +75,27 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 	if !issueComment.IsPullRequest {
 		return SuccessResponse{"Not a PR. Ignoring."}
 	}
-	switch {
-	case isSquashCommand(issueComment.Comment):
+	commentCategory := parseComment(issueComment.Comment)
+	if commentCategory == regularComment {
+		return SuccessResponse{"Not a command I understand. Ignoring."}
+	}
+	if successResp, errResp := checkUserAuthorization(issueComment, issues, repositories); errResp != nil {
+		return errResp
+	} else if successResp != nil {
+		return successResp
+	}
+	switch commentCategory {
+	case squashCommand:
 		return handleSquashCommand(issueComment, gitRepos, pullRequests, repositories)
-	case isMergeCommand(issueComment.Comment):
+	case mergeCommand:
 		return handleMergeCommand(issueComment, issues, pullRequests, repositories, gitRepos)
-	case isCheckCommand(issueComment.Comment):
+	case checkCommand:
 		return checkForFixupCommitsOnIssueComment(issueComment, pullRequests, repositories)
 	}
-	return SuccessResponse{"Not a command I understand. Ignoring."}
+	return ErrorResponse{
+		Code:         http.StatusInternalServerError,
+		ErrorMessage: fmt.Sprintf("Unhandled comment type: %v", commentCategory),
+	}
 }
 
 func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories Repositories) Response {
@@ -125,4 +137,44 @@ func initGithubClient(accessToken string) *github.Client {
 		Timeout:   30 * time.Second,
 	}
 	return github.NewClient(httpClient)
+}
+
+type commentType int
+
+const (
+	squashCommand commentType = iota
+	mergeCommand
+	checkCommand
+	regularComment
+)
+
+func parseComment(comment string) commentType {
+	switch {
+	case isSquashCommand(comment):
+		return squashCommand
+	case isMergeCommand(comment):
+		return mergeCommand
+	case isCheckCommand(comment):
+		return checkCommand
+	}
+	return regularComment
+}
+
+func checkUserAuthorization(issueComment IssueComment, issues Issues, repositories Repositories) (*SuccessResponse, *ErrorResponse) {
+	if isAuthorized, err := isCollaborator(issueComment.Repository, issueComment.User, repositories); err != nil {
+		return nil, &ErrorResponse{err, http.StatusBadGateway, "Failed to check if the user is authorized to issue the command"}
+	} else if !isAuthorized {
+		err = comment(
+			fmt.Sprintf("I'm sorry, @%s. I'm afraid I can't do that.", issueComment.User.Login),
+			issueComment.Repository,
+			issueComment.IssueNumber,
+			issues,
+		)
+		if err != nil {
+			return nil, &ErrorResponse{err, http.StatusBadGateway, "Failed to respond to unauthorized command"}
+		}
+		return &SuccessResponse{"Command issued by a someone who's not a collaborator." +
+			" Responded with a comment. Ignoring the command."}, nil
+	}
+	return nil, nil
 }

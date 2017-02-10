@@ -48,146 +48,148 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			return IssueCommentEvent("!check", arbitraryIssueAuthor)
 		})
 
-		Context("with GitHub request to list commits failing", func() {
-			Context("with a 404", func() {
+		ForCollaborator(context, repositoryOwner, repositoryName, arbitraryIssueAuthor, func() {
+			Context("with GitHub request to list commits failing", func() {
+				Context("with a 404", func() {
+					BeforeEach(func() {
+						resp, err := createGithubErrorResponse(http.StatusNotFound)
+						pullRequests.
+							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+							Return(emptyResult, resp, err)
+					})
+
+					It("fails with a gateway error", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					})
+
+					It("tries multiple times", func() {
+						handle()
+						// +1 because of the initial attempt
+						pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", grh.GetCommitsRetryLimit+1)
+					})
+				})
+
+				Context("with a different error", func() {
+					BeforeEach(func() {
+						resp, err := createGithubErrorResponse(http.StatusInternalServerError)
+						pullRequests.
+							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+							Return(emptyResult, resp, err)
+					})
+
+					It("fails with a gateway error", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					})
+
+					It("tries once", func() {
+						handle()
+						pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", 1)
+					})
+				})
+			})
+
+			Context("with list of commits from GitHub NOT including fixup commits", func() {
 				BeforeEach(func() {
-					resp, err := createGithubErrorResponse(http.StatusNotFound)
 					pullRequests.
 						On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return(emptyResult, resp, err)
-				})
-
-				It("fails with a gateway error", func() {
-					handle()
-					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
-				})
-
-				It("tries multiple times", func() {
-					handle()
-					// +1 because of the initial attempt
-					pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", grh.GetCommitsRetryLimit+1)
-				})
-			})
-
-			Context("with a different error", func() {
-				BeforeEach(func() {
-					resp, err := createGithubErrorResponse(http.StatusInternalServerError)
+						Return([]*github.RepositoryCommit{
+							&github.RepositoryCommit{
+								Commit: &github.Commit{
+									Message: github.String("Changing things"),
+								},
+							},
+							&github.RepositoryCommit{
+								Commit: &github.Commit{
+									Message: github.String("Another casual commit"),
+								},
+							},
+						}, &github.Response{}, noError)
 					pullRequests.
-						On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return(emptyResult, resp, err)
+						On("Get", repositoryOwner, repositoryName, issueNumber).
+						Return(&github.PullRequest{
+							Number: github.Int(issueNumber),
+							Head: &github.PullRequestBranch{
+								SHA:  github.String(commitRevision),
+								Repo: headRepository,
+							},
+							Base: &github.PullRequestBranch{
+								Repo: repository,
+							},
+						}, emptyResponse, noError)
 				})
 
-				It("fails with a gateway error", func() {
+				It("reports success status to GitHub", func() {
+					repositories.
+						On("CreateStatus", *headRepository.Owner.Login, *headRepository.Name, commitRevision,
+							mock.MatchedBy(func(status *github.RepoStatus) bool {
+								return *status.State == "success" && *status.Context == "review/squash"
+							}),
+						).
+						Return(emptyResult, emptyResult, noError)
+
 					handle()
-					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+
+					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+				})
+			})
+
+			Context("with paged list of commits from GitHub including fixup commits", func() {
+				BeforeEach(func() {
+					pullRequests.
+						On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+							Page:    1,
+							PerPage: 30,
+						}).
+						Return([]*github.RepositoryCommit{
+							&github.RepositoryCommit{
+								Commit: &github.Commit{
+									Message: github.String("Changing things"),
+								},
+							},
+						}, &github.Response{
+							NextPage: 2,
+						}, noError)
+					pullRequests.
+						On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+							Page:    2,
+							PerPage: 30,
+						}).
+						Return([]*github.RepositoryCommit{
+							&github.RepositoryCommit{
+								Commit: &github.Commit{
+									Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
+								},
+							},
+						}, emptyResponse, noError)
+					pullRequests.
+						On("Get", repositoryOwner, repositoryName, issueNumber).
+						Return(&github.PullRequest{
+							Number: github.Int(issueNumber),
+							Head: &github.PullRequestBranch{
+								SHA:  github.String(commitRevision),
+								Repo: headRepository,
+							},
+							Base: &github.PullRequestBranch{
+								Repo: repository,
+							},
+						}, emptyResponse, noError)
 				})
 
-				It("tries once", func() {
+				It("reports pending squash status to GitHub", func() {
+					repositories.
+						On("CreateStatus", *headRepository.Owner.Login, *headRepository.Name, commitRevision,
+							mock.MatchedBy(func(status *github.RepoStatus) bool {
+								return *status.State == "pending" && *status.Context == "review/squash"
+							}),
+						).
+						Return(emptyResult, emptyResponse, noError)
+
 					handle()
-					pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", 1)
+
+					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 				})
-			})
-		})
-
-		Context("with list of commits from GitHub NOT including fixup commits", func() {
-			BeforeEach(func() {
-				pullRequests.
-					On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-					Return([]*github.RepositoryCommit{
-						&github.RepositoryCommit{
-							Commit: &github.Commit{
-								Message: github.String("Changing things"),
-							},
-						},
-						&github.RepositoryCommit{
-							Commit: &github.Commit{
-								Message: github.String("Another casual commit"),
-							},
-						},
-					}, &github.Response{}, noError)
-				pullRequests.
-					On("Get", repositoryOwner, repositoryName, issueNumber).
-					Return(&github.PullRequest{
-						Number: github.Int(issueNumber),
-						Head: &github.PullRequestBranch{
-							SHA:  github.String(commitRevision),
-							Repo: headRepository,
-						},
-						Base: &github.PullRequestBranch{
-							Repo: repository,
-						},
-					}, emptyResponse, noError)
-			})
-
-			It("reports success status to GitHub", func() {
-				repositories.
-					On("CreateStatus", *headRepository.Owner.Login, *headRepository.Name, commitRevision,
-						mock.MatchedBy(func(status *github.RepoStatus) bool {
-							return *status.State == "success" && *status.Context == "review/squash"
-						}),
-					).
-					Return(emptyResult, emptyResult, noError)
-
-				handle()
-
-				Expect(responseRecorder.Code).To(Equal(http.StatusOK))
-			})
-		})
-
-		Context("with paged list of commits from GitHub including fixup commits", func() {
-			BeforeEach(func() {
-				pullRequests.
-					On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
-						Page:    1,
-						PerPage: 30,
-					}).
-					Return([]*github.RepositoryCommit{
-						&github.RepositoryCommit{
-							Commit: &github.Commit{
-								Message: github.String("Changing things"),
-							},
-						},
-					}, &github.Response{
-						NextPage: 2,
-					}, noError)
-				pullRequests.
-					On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
-						Page:    2,
-						PerPage: 30,
-					}).
-					Return([]*github.RepositoryCommit{
-						&github.RepositoryCommit{
-							Commit: &github.Commit{
-								Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
-							},
-						},
-					}, emptyResponse, noError)
-				pullRequests.
-					On("Get", repositoryOwner, repositoryName, issueNumber).
-					Return(&github.PullRequest{
-						Number: github.Int(issueNumber),
-						Head: &github.PullRequestBranch{
-							SHA:  github.String(commitRevision),
-							Repo: headRepository,
-						},
-						Base: &github.PullRequestBranch{
-							Repo: repository,
-						},
-					}, emptyResponse, noError)
-			})
-
-			It("reports pending squash status to GitHub", func() {
-				repositories.
-					On("CreateStatus", *headRepository.Owner.Login, *headRepository.Name, commitRevision,
-						mock.MatchedBy(func(status *github.RepoStatus) bool {
-							return *status.State == "pending" && *status.Context == "review/squash"
-						}),
-					).
-					Return(emptyResult, emptyResponse, noError)
-
-				handle()
-
-				Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 			})
 		})
 	})
