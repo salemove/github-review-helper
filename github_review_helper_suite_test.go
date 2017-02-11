@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -70,7 +71,8 @@ type WebhookTest func(WebhookTestContext)
 var TestWebhookHandler = func(test WebhookTest) bool {
 	Describe("webhook handler", func() {
 		var (
-			conf grh.Config
+			conf             grh.Config
+			asyncOperationWg *sync.WaitGroup
 
 			requestJSON = NewStringMemoizer(func() string {
 				return ""
@@ -101,7 +103,9 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 			conf = grh.Config{
 				Secret: "a-secret",
 			}
-			*handler = grh.CreateHandler(conf, *gitRepos, *pullRequests, *repositories, *issues, *search)
+			asyncOperationWg = &sync.WaitGroup{}
+			*handler = grh.CreateHandler(conf, *gitRepos, asyncOperationWg, *pullRequests,
+				*repositories, *issues, *search)
 		})
 
 		JustBeforeEach(func() {
@@ -134,6 +138,9 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 		var handle = func() {
 			response := (*handler)(*responseRecorder, *request)
 			response.WriteResponse(*responseRecorder)
+			// The delay is set to 0 for tests. Wait for all of the operations
+			// to finish to simplify test code.
+			asyncOperationWg.Wait()
 		}
 
 		test(WebhookTestContext{

@@ -218,7 +218,7 @@ func commentMentioning(user string) func(issueComment *github.IssueComment) bool
 	}
 }
 
-var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
+var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts ...bool) {
 	var (
 		handle = context.Handle
 
@@ -230,6 +230,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 		issueAuthor string
 		issueNumber int
 		headRef     string
+
+		// async errors are logged, but won't affect the outcome of the HTTP
+		// request. The tests can only confirm that the right stubs were called
+		// for async operations.
+		isAsync bool
 	)
 	BeforeEach(func() {
 		responseRecorder = *context.ResponseRecorder
@@ -240,6 +245,12 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 		issueAuthor = *pr.User.Login
 		issueNumber = *pr.Number
 		headRef = *pr.Head.Ref
+
+		if len(opts) == 0 {
+			isAsync = false
+		} else {
+			isAsync = opts[0]
+		}
 	})
 
 	Context("with merge failing with an unknown error", func() {
@@ -260,7 +271,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 		It("fails with a gateway error", func() {
 			handle()
-			Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+			if isAsync {
+				Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+			} else {
+				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+			}
 		})
 	})
 
@@ -306,7 +321,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 					Return(emptyResult, emptyResponse, noError)
 
 				handle()
-				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				if isAsync {
+					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+				} else {
+					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				}
 			})
 
 			Context("with author notification failing", func() {
@@ -319,7 +338,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 				It("fails with a gateway error", func() {
 					handle()
-					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					if isAsync {
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					} else {
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					}
 				})
 			})
 		})
@@ -366,7 +389,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 		It("fails with a gateway error", func() {
 			handle()
-			Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+			if isAsync {
+				Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+			} else {
+				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+			}
 		})
 	})
 
@@ -397,7 +424,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 			It("fails with a gateway error", func() {
 				handle()
-				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				if isAsync {
+					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+				} else {
+					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				}
 			})
 		})
 
@@ -418,7 +449,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 				It("fails with an internal error", func() {
 					handle()
-					Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError))
+					if isAsync {
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					} else {
+						Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError))
+					}
 				})
 			})
 
@@ -439,7 +474,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 					It("fails with an internal error", func() {
 						handle()
-						Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError))
+						if isAsync {
+							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						} else {
+							Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError))
+						}
 					})
 				})
 

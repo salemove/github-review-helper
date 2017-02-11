@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"gopkg.in/tylerb/graceful.v1"
@@ -30,11 +31,13 @@ func main() {
 	defer os.RemoveAll(reposDir)
 
 	gitRepos := git.NewRepos(reposDir)
+	var asyncOperationWg sync.WaitGroup
 
 	mux := http.NewServeMux()
 	mux.Handle("/", CreateHandler(
 		conf,
 		gitRepos,
+		&asyncOperationWg,
 		githubClient.PullRequests,
 		githubClient.Repositories,
 		githubClient.Issues,
@@ -42,10 +45,11 @@ func main() {
 	))
 
 	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+	asyncOperationWg.Wait()
 }
 
-func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories,
-	issues Issues, search Search) Handler {
+func CreateHandler(conf Config, gitRepos git.Repos, asyncOperationWg *sync.WaitGroup, pullRequests PullRequests,
+	repositories Repositories, issues Issues, search Search) Handler {
 	return func(w http.ResponseWriter, r *http.Request) Response {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -61,7 +65,7 @@ func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, r
 		case "pull_request":
 			return handlePullRequestEvent(body, pullRequests, repositories)
 		case "status":
-			return handleStatusEvent(body, gitRepos, search, issues, pullRequests)
+			return handleStatusEvent(body, conf, asyncOperationWg, gitRepos, search, issues, pullRequests)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
 	}
@@ -108,13 +112,19 @@ func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories
 	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories)
 }
 
-func handleStatusEvent(body []byte, gitRepos git.Repos, search Search, issues Issues,
-	pullRequests PullRequests) Response {
+func handleStatusEvent(body []byte, conf Config, asyncOperationWg *sync.WaitGroup, gitRepos git.Repos, search Search,
+	issues Issues, pullRequests PullRequests) Response {
 	statusEvent, err := parseStatusEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	} else if newPullRequestsPossiblyReadyForMerging(statusEvent) {
-		return mergePullRequestsReadyForMerging(statusEvent, gitRepos, search, issues, pullRequests)
+		delay(conf.GithubAPIDelay, func() Response {
+			return mergePullRequestsReadyForMerging(statusEvent, gitRepos, search, issues, pullRequests)
+		}, asyncOperationWg)
+		return SuccessResponse{
+			fmt.Sprintf("Status update might have caused a PR to become mergeable. Scheduled an operation "+
+				"which will start in %s to check for mergeable PRs.", conf.GithubAPIDelay.String()),
+		}
 	}
 	return SuccessResponse{"Status update does not affect any PRs mergeability. Ignoring."}
 }
@@ -178,4 +188,13 @@ func checkUserAuthorization(issueComment IssueComment, issues Issues, repositori
 			" Responded with a comment. Ignoring the command."}, nil
 	}
 	return nil, nil
+}
+
+func delay(duration time.Duration, operation func() Response, asyncOperationWg *sync.WaitGroup) {
+	asyncOperationWg.Add(1)
+	time.AfterFunc(duration, func() {
+		defer asyncOperationWg.Done()
+		response := operation()
+		handleAsyncResponse(response)
+	})
 }
