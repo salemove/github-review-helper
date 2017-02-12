@@ -81,6 +81,49 @@ func TestSquash(t *testing.T) {
 	}
 }
 
+func TestDeleteRemoteBranch(t *testing.T) {
+	skipWithoutGit(t)
+
+	testRepoGit, testRepoDir, cleanup := createTestRepo(t)
+	defer cleanup()
+
+	featureBranchName := "feature"
+	testRepoGit("checkout", "-b", featureBranchName)
+
+	createFile(t, testRepoDir, foo)
+	testRepoGit("add", foo.Name)
+	commitToFixMessage := "Add foo"
+	testRepoGit("commit", "-m", commitToFixMessage)
+
+	// Checkout master because git by default doesn't allow pushing onto or
+	// deleting branches that are currently checked out.
+	testRepoGit("checkout", "master")
+
+	reposDir, cleanup := createTempDir(t)
+	defer cleanup()
+
+	gitRepos := git.NewRepos(reposDir)
+	repo, err := gitRepos.GetUpdatedRepo(testRepoDir, "my", "test-repo")
+	checkError(t, err)
+
+	err = repo.DeleteRemoteBranch(featureBranchName)
+	checkError(t, err)
+
+	branches := getBranches(testRepoGit)
+	hasOnlyMaster := len(branches) == 1 && branches[0] == "master"
+	if !hasOnlyMaster {
+		t.Fatalf(
+			"Expected the repo to only have a master branch but it has: %s",
+			strings.Join(branches, ", "),
+		)
+	}
+}
+
+func getBranches(git gitClient) []string {
+	branchesString := git("for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	return strings.Fields(branchesString)
+}
+
 type gitClient func(...string) string
 
 func createTestRepo(t *testing.T) (gitClient, string, func()) {

@@ -30,3 +30,15 @@ func (_m *Repo) AutosquashAndPush(upstreamRef string, branchRef string, destinat
 
 	return r0
 }
+func (_m *Repo) DeleteRemoteBranch(remoteRef string) error {
+	ret := _m.Called(remoteRef)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(remoteRef)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
