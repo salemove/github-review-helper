@@ -224,3 +224,7 @@ func isCollaborator(repository Repository, user User, repositories Repositories)
 func is404Error(resp *github.Response) bool {
 	return resp != nil && resp.StatusCode == http.StatusNotFound
 }
+
+func isAcrossForks(pr *github.PullRequest) bool {
+	return *pr.Base.Repo.ID != *pr.Head.Repo.ID
+}

@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	repositoryID         = 456
 	repositoryOwner      = "salemove"
 	repositoryName       = "github-review-helper"
 	sshURL               = "git@github.com:salemove/github-review-helper.git"
@@ -33,6 +34,7 @@ const (
 
 var (
 	repository = &github.Repository{
+		ID: github.Int(repositoryID),
 		Owner: &github.User{
 			Login: github.String(repositoryOwner),
 		},

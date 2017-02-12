@@ -28,12 +28,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			pullRequests     *mocks.PullRequests
 			issues           *mocks.Issues
 			search           *mocks.Search
+			gitRepos         *mocks.Repos
 		)
 		BeforeEach(func() {
 			responseRecorder = *context.ResponseRecorder
 			pullRequests = *context.PullRequests
 			issues = *context.Issues
 			search = *context.Search
+			gitRepos = *context.GitRepos
 		})
 
 		headers.Is(func() map[string]string {
@@ -122,7 +124,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					})
 				})
 
-				Context("with issue search return a PR", func() {
+				Context("with issue search returning a PR", func() {
 					userName := "bestcoder"
 					issueNumber := 7331
 
@@ -139,7 +141,43 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						mockSearchQuery(1).Return(searchResult, &github.Response{}, noError)
 					})
 
-					ItMergesPR(context, userName, issueNumber)
+					Context("with GitHub API request for that PR failing", func() {
+						BeforeEach(func() {
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(emptyResult, emptyResponse, errArbitrary)
+						})
+
+						It("fails with a gateway error", func() {
+							handle()
+							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+						})
+					})
+
+					Context("with GitHub API request for that PR succeeding", func() {
+						pr := &github.PullRequest{
+							Number: github.Int(issueNumber),
+							Base: &github.PullRequestBranch{
+								Ref:  github.String("master"),
+								Repo: repository,
+							},
+							Head: &github.PullRequestBranch{
+								Ref:  github.String("feature"),
+								Repo: repository,
+							},
+							User: &github.User{
+								Login: github.String(userName),
+							},
+						}
+
+						BeforeEach(func() {
+							pullRequests.
+								On("Get", repositoryOwner, repositoryName, issueNumber).
+								Return(pr, emptyResponse, noError)
+						})
+
+						ItMergesPR(context, pr)
+					})
 				})
 
 				Context("with issue search returning 2 PRs", func() {
@@ -148,7 +186,28 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					firstAuthor := "me"
 					secondAuthor := "you"
 
-					expectMerge := func(number int) {
+					expectMerge := func(number int, author string) {
+						// Fetch PR
+						headRef := "feature"
+						pr := &github.PullRequest{
+							Number: github.Int(number),
+							Base: &github.PullRequestBranch{
+								Ref:  github.String("master"),
+								Repo: repository,
+							},
+							Head: &github.PullRequestBranch{
+								Ref:  github.String(headRef),
+								Repo: repository,
+							},
+							User: &github.User{
+								Login: github.String(author),
+							},
+						}
+						pullRequests.
+							On("Get", repositoryOwner, repositoryName, number).
+							Return(pr, emptyResponse, noError).
+							Once()
+						// Merge
 						additionalCommitMessage := ""
 						pullRequests.
 							On(
@@ -163,13 +222,18 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								Merged: github.Bool(true),
 							}, emptyResponse, noError).
 							Once()
-					}
-					expectLabelRemove := func(number int) {
+						// Remove label
 						issues.
 							On("RemoveLabelForIssue", repositoryOwner, repositoryName, number, grh.MergingLabel).
 							Return(emptyResponse, noError).
 							Once()
-
+						// Delete branch
+						gitRepo := new(mocks.Repo)
+						gitRepos.
+							On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).
+							Return(gitRepo, noError).
+							Once()
+						gitRepo.On("DeleteRemoteBranch", headRef).Return(noError).Once()
 					}
 
 					BeforeEach(func() {
@@ -196,10 +260,8 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					})
 
 					It("it merges both PRs and removes the 'merging' label from both PRs after the merge", func() {
-						expectMerge(firstIssueNumber)
-						expectLabelRemove(firstIssueNumber)
-						expectMerge(secondIssueNumber)
-						expectLabelRemove(secondIssueNumber)
+						expectMerge(firstIssueNumber, firstAuthor)
+						expectMerge(secondIssueNumber, secondAuthor)
 
 						handle()
 						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
