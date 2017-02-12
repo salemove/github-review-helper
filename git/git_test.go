@@ -34,17 +34,8 @@ var (
 func TestSquash(t *testing.T) {
 	skipWithoutGit(t)
 
-	testRepoDir, cleanup := createTempDir(t)
+	testRepoGit, testRepoDir, cleanup := createTestRepo(t)
 	defer cleanup()
-	testRepoGit := gitForPath(t, testRepoDir)
-
-	testRepoGit("init")
-	// Configure username and email that are required for creating commits
-	testRepoGit("config", "user.name", "git-test")
-	testRepoGit("config", "user.email", "<>")
-	createFile(t, testRepoDir, readme)
-	testRepoGit("add", readme.Name)
-	testRepoGit("commit", "-m", "Init with foo")
 
 	featureBranchName := "feature"
 	testRepoGit("checkout", "-b", featureBranchName)
@@ -90,6 +81,23 @@ func TestSquash(t *testing.T) {
 	}
 }
 
+type gitClient func(...string) string
+
+func createTestRepo(t *testing.T) (gitClient, string, func()) {
+	testRepoDir, cleanup := createTempDir(t)
+	testRepoGit := gitForPath(t, testRepoDir)
+
+	testRepoGit("init")
+	// Configure username and email that are required for creating commits
+	testRepoGit("config", "user.name", "git-test")
+	testRepoGit("config", "user.email", "<>")
+	createFile(t, testRepoDir, readme)
+	testRepoGit("add", readme.Name)
+	testRepoGit("commit", "-m", "Init with foo")
+
+	return testRepoGit, testRepoDir, cleanup
+}
+
 func checkFile(t *testing.T, dirPath string, f file) {
 	path := filepath.Join(dirPath, f.Name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -109,7 +117,7 @@ func createFile(t *testing.T, dirPath string, f file) {
 	checkError(t, err)
 }
 
-func gitForPath(t *testing.T, repoPath string) func(...string) string {
+func gitForPath(t *testing.T, repoPath string) gitClient {
 	pathArgs := []string{"-C", repoPath}
 
 	return func(args ...string) string {
