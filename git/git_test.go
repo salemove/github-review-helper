@@ -2,13 +2,14 @@ package git_test
 
 import (
 	"bufio"
-	"github.com/salemove/github-review-helper/git"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/salemove/github-review-helper/git"
 )
 
 type file struct {
@@ -54,13 +55,10 @@ func TestSquash(t *testing.T) {
 	// feature branch is properly updated after the squash.
 	testRepoGit("checkout", "master")
 
-	reposDir, cleanup := createTempDir(t)
+	repo, cleanup := cloneTestRepo(t, testRepoDir)
 	defer cleanup()
 
-	gitRepos := git.NewRepos(reposDir)
-	repo, err := gitRepos.GetUpdatedRepo(testRepoDir, "my", "test-repo")
-	checkError(t, err)
-	err = repo.AutosquashAndPush("origin/master", "origin/"+featureBranchName, featureBranchName)
+	err := repo.AutosquashAndPush("origin/master", "origin/"+featureBranchName, featureBranchName)
 	checkError(t, err)
 
 	// Check that all files still exist in the feature branch and that the
@@ -99,14 +97,10 @@ func TestDeleteRemoteBranch(t *testing.T) {
 	// deleting branches that are currently checked out.
 	testRepoGit("checkout", "master")
 
-	reposDir, cleanup := createTempDir(t)
+	repo, cleanup := cloneTestRepo(t, testRepoDir)
 	defer cleanup()
 
-	gitRepos := git.NewRepos(reposDir)
-	repo, err := gitRepos.GetUpdatedRepo(testRepoDir, "my", "test-repo")
-	checkError(t, err)
-
-	err = repo.DeleteRemoteBranch(featureBranchName)
+	err := repo.DeleteRemoteBranch(featureBranchName)
 	checkError(t, err)
 
 	branches := getBranches(testRepoGit)
@@ -125,6 +119,16 @@ func getBranches(git gitClient) []string {
 }
 
 type gitClient func(...string) string
+
+func cloneTestRepo(t *testing.T, testRepoDir string) (git.Repo, func()) {
+	reposDir, cleanup := createTempDir(t)
+
+	gitRepos := git.NewRepos(reposDir)
+	repo, err := gitRepos.GetUpdatedRepo(testRepoDir, "my", "test-repo")
+	checkError(t, err)
+
+	return repo, cleanup
+}
 
 func createTestRepo(t *testing.T) (gitClient, string, func()) {
 	testRepoDir, cleanup := createTempDir(t)
