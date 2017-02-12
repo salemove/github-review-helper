@@ -39,6 +39,22 @@ func TestDeleteRemoteBranch(t *testing.T) {
 	}
 }
 
+func TestDeleteRemoteBranch_noBranch(t *testing.T) {
+	skipWithoutGit(t)
+
+	_, testRepoDir, cleanup := createTestRepo(t)
+	defer cleanup()
+
+	repo, cleanup := cloneTestRepo(t, testRepoDir)
+	defer cleanup()
+
+	nonExistentBranchName := "feature"
+	err := repo.DeleteRemoteBranch(nonExistentBranchName)
+	if err == nil {
+		t.Fatal("Expected deletion of a non-existent branch to fail")
+	}
+}
+
 func getBranches(git gitClient) []string {
 	branchesString := git("for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	return strings.Fields(branchesString)
