@@ -132,6 +132,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Ref:  github.String("feature"),
 							Repo: repository,
 						},
+						User: &github.User{
+							Login: github.String(issueAuthor),
+						},
 					}
 
 					BeforeEach(func() {
@@ -201,7 +204,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								}, emptyResponse, noError)
 						})
 
-						ItMergesPR(context, issueAuthor, issueNumber)
+						ItMergesPR(context, pr)
 					})
 				})
 			})
@@ -215,18 +218,28 @@ func commentMentioning(user string) func(issueComment *github.IssueComment) bool
 	}
 }
 
-var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumber int) {
+var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 	var (
 		handle = context.Handle
 
 		responseRecorder *httptest.ResponseRecorder
 		pullRequests     *mocks.PullRequests
 		issues           *mocks.Issues
+		gitRepos         *mocks.Repos
+
+		issueAuthor string
+		issueNumber int
+		headRef     string
 	)
 	BeforeEach(func() {
 		responseRecorder = *context.ResponseRecorder
 		pullRequests = *context.PullRequests
 		issues = *context.Issues
+		gitRepos = *context.GitRepos
+
+		issueAuthor = *pr.User.Login
+		issueNumber = *pr.Number
+		headRef = *pr.Head.Ref
 	})
 
 	Context("with merge failing with an unknown error", func() {
@@ -375,13 +388,72 @@ var ItMergesPR = func(context WebhookTestContext, issueAuthor string, issueNumbe
 				Once()
 		})
 
-		It("removes the 'merging' label from the PR after the merge", func() {
-			issues.
-				On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
-				Return(emptyResponse, noError)
+		Context("with removing the 'merging' label failing", func() {
+			BeforeEach(func() {
+				issues.
+					On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+					Return(emptyResponse, errArbitrary)
+			})
 
-			handle()
-			Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+			It("fails with a gateway error", func() {
+				handle()
+				Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+			})
+		})
+
+		Context("with removing the 'merging' label succeeding", func() {
+			BeforeEach(func() {
+				issues.
+					On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+					Return(emptyResponse, noError)
+			})
+
+			Context("with getting an updated git repository failing", func() {
+				BeforeEach(func() {
+					gitRepo := new(mocks.Repo)
+					gitRepos.
+						On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).
+						Return(gitRepo, errArbitrary)
+				})
+
+				It("fails with an internal error", func() {
+					handle()
+					Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError))
+				})
+			})
+
+			Context("with getting an updated git repository succeeding", func() {
+				var gitRepo *mocks.Repo
+
+				BeforeEach(func() {
+					gitRepo = new(mocks.Repo)
+					gitRepos.
+						On("GetUpdatedRepo", sshURL, repositoryOwner, repositoryName).
+						Return(gitRepo, noError)
+				})
+
+				Context("with deleting the remote branch failing", func() {
+					BeforeEach(func() {
+						gitRepo.On("DeleteRemoteBranch", headRef).Return(errArbitrary)
+					})
+
+					It("fails with an internal error", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError))
+					})
+				})
+
+				Context("with deleting the remote branch succeeding", func() {
+					BeforeEach(func() {
+						gitRepo.On("DeleteRemoteBranch", headRef).Return(noError)
+					})
+
+					It("returns 200 OK", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					})
+				})
+			})
 		})
 	})
 }

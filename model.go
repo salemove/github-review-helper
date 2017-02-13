@@ -9,7 +9,7 @@ type (
 	Issue struct {
 		Number     int
 		Repository Repository
-		User User
+		User       User
 	}
 
 	Issueable interface {
@@ -63,7 +63,7 @@ func (i IssueComment) Issue() Issue {
 	return Issue{
 		Number:     i.IssueNumber,
 		Repository: i.Repository,
-		User: i.User,
+		User:       i.User,
 	}
 }
 
@@ -71,8 +71,12 @@ func (p PullRequestEvent) Issue() Issue {
 	return Issue{
 		Number:     p.IssueNumber,
 		Repository: p.Repository,
-		User: p.User,
+		User:       p.User,
 	}
+}
+
+func (i Issue) Issue() Issue {
+	return i
 }
 
 func (i Issue) FullName() string {
@@ -84,10 +88,28 @@ func prFullName(pr *github.PullRequest) string {
 	return fmt.Sprintf("%s/%s#%d", *baseRepository.Owner.Login, *baseRepository.Name, *pr.Number)
 }
 
+func prIssue(pr *github.PullRequest) Issue {
+	return Issue{
+		Number:     *pr.Number,
+		Repository: baseRepository(pr),
+		User: User{
+			Login: *pr.User.Login,
+		},
+	}
+}
+
+func baseRepository(pr *github.PullRequest) Repository {
+	return repositoryInternalRepresentation(pr.Base.Repo)
+}
+
 func headRepository(pr *github.PullRequest) Repository {
+	return repositoryInternalRepresentation(pr.Head.Repo)
+}
+
+func repositoryInternalRepresentation(repo *github.Repository) Repository {
 	return Repository{
-		Owner: *pr.Head.Repo.Owner.Login,
-		Name:  *pr.Head.Repo.Name,
-		URL:   *pr.Head.Repo.SSHURL,
+		Owner: *repo.Owner.Login,
+		Name:  *repo.Name,
+		URL:   *repo.SSHURL,
 	}
 }

@@ -61,7 +61,7 @@ func CreateHandler(conf Config, gitRepos git.Repos, pullRequests PullRequests, r
 		case "pull_request":
 			return handlePullRequestEvent(body, pullRequests, repositories)
 		case "status":
-			return handleStatusEvent(body, search, issues, pullRequests)
+			return handleStatusEvent(body, gitRepos, search, issues, pullRequests)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
 	}
@@ -108,12 +108,13 @@ func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories
 	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories)
 }
 
-func handleStatusEvent(body []byte, search Search, issues Issues, pullRequests PullRequests) Response {
+func handleStatusEvent(body []byte, gitRepos git.Repos, search Search, issues Issues,
+	pullRequests PullRequests) Response {
 	statusEvent, err := parseStatusEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	} else if newPullRequestsPossiblyReadyForMerging(statusEvent) {
-		return mergePullRequestsReadyForMerging(statusEvent, search, issues, pullRequests)
+		return mergePullRequestsReadyForMerging(statusEvent, gitRepos, search, issues, pullRequests)
 	}
 	return SuccessResponse{"Status update does not affect any PRs mergeability. Ignoring."}
 }

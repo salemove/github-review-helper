@@ -2,13 +2,14 @@ package git_test
 
 import (
 	"bufio"
-	"github.com/salemove/github-review-helper/git"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/salemove/github-review-helper/git"
 )
 
 type file struct {
@@ -31,11 +32,20 @@ var (
 	}
 )
 
-func TestSquash(t *testing.T) {
-	skipWithoutGit(t)
+type gitClient func(...string) string
 
+func cloneTestRepo(t *testing.T, testRepoDir string) (git.Repo, func()) {
+	reposDir, cleanup := createTempDir(t)
+
+	gitRepos := git.NewRepos(reposDir)
+	repo, err := gitRepos.GetUpdatedRepo(testRepoDir, "my", "test-repo")
+	checkError(t, err)
+
+	return repo, cleanup
+}
+
+func createTestRepo(t *testing.T) (gitClient, string, func()) {
 	testRepoDir, cleanup := createTempDir(t)
-	defer cleanup()
 	testRepoGit := gitForPath(t, testRepoDir)
 
 	testRepoGit("init")
@@ -46,48 +56,7 @@ func TestSquash(t *testing.T) {
 	testRepoGit("add", readme.Name)
 	testRepoGit("commit", "-m", "Init with foo")
 
-	featureBranchName := "feature"
-	testRepoGit("checkout", "-b", featureBranchName)
-
-	createFile(t, testRepoDir, foo)
-	testRepoGit("add", foo.Name)
-	commitToFixMessage := "Add foo"
-	testRepoGit("commit", "-m", commitToFixMessage)
-
-	createFile(t, testRepoDir, bar)
-	testRepoGit("add", bar.Name)
-	testRepoGit("commit", "--fixup=@")
-
-	// Checkout master because git by default doesn't allow pushing onto
-	// branches that are currently checked out and we want to confirm that the
-	// feature branch is properly updated after the squash.
-	testRepoGit("checkout", "master")
-
-	reposDir, cleanup := createTempDir(t)
-	defer cleanup()
-
-	gitRepos := git.NewRepos(reposDir)
-	repo, err := gitRepos.GetUpdatedRepo(testRepoDir, "my", "test-repo")
-	checkError(t, err)
-	err = repo.AutosquashAndPush("origin/master", "origin/"+featureBranchName, featureBranchName)
-	checkError(t, err)
-
-	// Check that all files still exist in the feature branch and that the
-	// fixup commit has been squashed to its parent
-	testRepoGit("checkout", featureBranchName)
-
-	checkFile(t, testRepoDir, readme)
-	checkFile(t, testRepoDir, foo)
-	checkFile(t, testRepoDir, bar)
-
-	headCommitMessage := testRepoGit("show", "-s", "--format=%B", "@")
-	if headCommitMessage != commitToFixMessage {
-		t.Fatalf(
-			"Expected HEAD commit to have message \"%s\", but got \"%s\"",
-			commitToFixMessage,
-			headCommitMessage,
-		)
-	}
+	return testRepoGit, testRepoDir, cleanup
 }
 
 func checkFile(t *testing.T, dirPath string, f file) {
@@ -109,7 +78,7 @@ func createFile(t *testing.T, dirPath string, f file) {
 	checkError(t, err)
 }
 
-func gitForPath(t *testing.T, repoPath string) func(...string) string {
+func gitForPath(t *testing.T, repoPath string) gitClient {
 	pathArgs := []string{"-C", repoPath}
 
 	return func(args ...string) string {

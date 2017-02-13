@@ -22,6 +22,7 @@ type Repo interface {
 	// Runs `git rebase --interactive --autosquash` for the given refs and automatically saves and closes
 	// the editor for interactive rebase. Then force pushes the current HEAD to destinationRef on origin.
 	AutosquashAndPush(upstreamRef, branchRef, destinationRef string) error
+	DeleteRemoteBranch(remoteRef string) error
 }
 
 type ErrSquashConflict struct {
@@ -157,6 +158,16 @@ func (r *repo) configureNameEmail() error {
 func (r *repo) git(args ...string) error {
 	allArgs := append([]string{"-C", r.path}, args...)
 	return runWithLogging("git", allArgs...)
+}
+
+func (r *repo) DeleteRemoteBranch(remoteRef string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	if err := runWithLogging("git", "-C", r.path, "push", "origin", "--delete", remoteRef); err != nil {
+		return fmt.Errorf("failed to remove remote branch %s: %v", remoteRef, err)
+	}
+	return nil
 }
 
 func runWithLogging(name string, args ...string) error {

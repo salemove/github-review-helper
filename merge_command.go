@@ -56,13 +56,15 @@ func handleMergeCommand(issueComment IssueComment, issues Issues, pullRequests P
 		log.Printf("PR #%d has pending and/or failed statuses. Not merging.\n", issueComment.IssueNumber)
 		return SuccessResponse{}
 	}
-	if errResp = mergeReadyPR(issueComment.Issue(), issues, pullRequests); errResp != nil {
+	if errResp = mergeReadyPR(pr, gitRepos, issues, pullRequests); errResp != nil {
 		return errResp
 	}
 	return SuccessResponse{fmt.Sprintf("Successfully merged PR %s", issueComment.Issue().FullName())}
 }
 
-func mergeReadyPR(issue Issue, issues Issues, pullRequests PullRequests) *ErrorResponse {
+func mergeReadyPR(pr *github.PullRequest, gitRepos git.Repos, issues Issues,
+	pullRequests PullRequests) *ErrorResponse {
+	issue := prIssue(pr)
 	err := merge(issue.Repository, issue.Number, pullRequests)
 	if err == ErrMergeConflict {
 		return handleMergeConflict(issue, issues)
@@ -79,11 +81,19 @@ func mergeReadyPR(issue Issue, issues Issues, pullRequests PullRequests) *ErrorR
 	if errResp != nil {
 		return errResp
 	}
+	if isAcrossForks(pr) {
+		log.Printf("PR %s is across forks. Not removing the head branch.\n", issue.FullName())
+	} else {
+		errResp = deleteRemoteBranch(pr, gitRepos)
+		if errResp != nil {
+			return errResp
+		}
+	}
 	return nil
 }
 
-func mergePullRequestsReadyForMerging(statusEvent StatusEvent, search Search, issues Issues,
-	pullRequests PullRequests) Response {
+func mergePullRequestsReadyForMerging(statusEvent StatusEvent, gitRepos git.Repos, search Search,
+	issues Issues, pullRequests PullRequests) Response {
 	// Not sure if applying the additional repo:owner/name filter to the query
 	// works for cross-fork PRs, but nothing else has been tested with
 	// cross-fork PRs either so this is left in for now.
@@ -105,8 +115,22 @@ func mergePullRequestsReadyForMerging(statusEvent StatusEvent, search Search, is
 	if err != nil {
 		message := fmt.Sprintf("Searching for issues with query '%s' failed", query)
 		return ErrorResponse{err, http.StatusBadGateway, message}
+	} else if len(issuesToMerge) == 0 {
+		return SuccessResponse{"Found no PRs to merge"}
 	}
+
 	var finalErrResp *ErrorResponse
+	handleErrResp := func(errResp *ErrorResponse) {
+		if finalErrResp == nil {
+			finalErrResp = errResp
+		} else {
+			log.Printf("Multiple PR merge errors have occured. Marking the latest error to be "+
+				"returned as a response, replacing the previous error. Logging the previous "+
+				"error:\n%s: %v\n", finalErrResp.ErrorMessage, finalErrResp.Error)
+			finalErrResp = errResp
+		}
+	}
+
 	for _, issueToMerge := range issuesToMerge {
 		issue := Issue{
 			Number:     *issueToMerge.Number,
@@ -115,15 +139,13 @@ func mergePullRequestsReadyForMerging(statusEvent StatusEvent, search Search, is
 				Login: *issueToMerge.User.Login,
 			},
 		}
-		if errResp := mergeReadyPR(issue, issues, pullRequests); errResp != nil {
-			if finalErrResp == nil {
-				finalErrResp = errResp
-			} else {
-				log.Printf("Multiple PR merge errors have occured. Marking the latest error to be "+
-					"returned as a response, replacing the previous error. Logging the previous "+
-					"error:\n%s: %v\n", finalErrResp.ErrorMessage, finalErrResp.Error)
-				finalErrResp = errResp
-			}
+		pr, errResp := getPR(issue, pullRequests)
+		if errResp != nil {
+			handleErrResp(errResp)
+			continue
+		}
+		if errResp := mergeReadyPR(pr, gitRepos, issues, pullRequests); errResp != nil {
+			handleErrResp(errResp)
 		}
 	}
 	if finalErrResp != nil {
@@ -177,6 +199,27 @@ func handleMergeConflict(issue Issue, issues Issues) *ErrorResponse {
 		// Still mark the request as failed, because we were unable to
 		// remove the label properly.
 		return removeLabelErrResp
+	}
+	return nil
+}
+
+func deleteRemoteBranch(pr *github.PullRequest, gitRepos git.Repos) *ErrorResponse {
+	log.Printf("Deleting head branch %s for PR %s.\n", *pr.Head.Ref, prFullName(pr))
+
+	repository := baseRepository(pr)
+	gitRepo, err := gitRepos.GetUpdatedRepo(repository.URL, repository.Owner, repository.Name)
+	if err != nil {
+		message := fmt.Sprintf("Failed to get an updated repo for PR %s", prFullName(pr))
+		return &ErrorResponse{err, http.StatusInternalServerError, message}
+	}
+	err = gitRepo.DeleteRemoteBranch(*pr.Head.Ref)
+	if err != nil {
+		message := fmt.Sprintf(
+			"Failed to delete branch %s for PR %s",
+			*pr.Head.Ref,
+			prFullName(pr),
+		)
+		return &ErrorResponse{err, http.StatusInternalServerError, message}
 	}
 	return nil
 }
