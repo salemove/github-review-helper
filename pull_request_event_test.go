@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -39,7 +40,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			repositories = *context.Repositories
 		})
 
-		var commitRevision = "1235"
+		var pullRequestHeadSHA = "1235"
 		var headRepository = grh.Repository{
 			Owner: "other",
 			Name:  "github-review-helper-fork",
@@ -54,7 +55,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 		Context("with the PR being closed", func() {
 			requestJSON.Is(func() string {
-				return PullRequestEvent("closed", commitRevision, headRepository)
+				return PullRequestEvent("closed", pullRequestHeadSHA, headRepository)
 			})
 
 			It("succeeds with 'ignored' response", func() {
@@ -66,7 +67,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 		Context("with the PR being synchronized", func() {
 			requestJSON.Is(func() string {
-				return PullRequestEvent("synchronize", commitRevision, headRepository)
+				return PullRequestEvent("synchronize", pullRequestHeadSHA, headRepository)
 			})
 
 			Context("with GitHub request to list commits failing", func() {
@@ -109,6 +110,39 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				})
 			})
 
+			Context("with the head commit differing from the head SHA in the event", func() {
+				headCommitRevision := strings.Replace(pullRequestHeadSHA, "123", "223", 1)
+
+				BeforeEach(func() {
+					pullRequests.
+						On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+						Return([]*github.RepositoryCommit{
+							&github.RepositoryCommit{
+								Commit: &github.Commit{
+									Message: github.String("Changing things"),
+								},
+							},
+							&github.RepositoryCommit{
+								SHA: github.String(headCommitRevision),
+								Commit: &github.Commit{
+									Message: github.String("Another casual commit"),
+								},
+							},
+						}, emptyResponse, noError)
+				})
+
+				It("fails with a gateway error", func() {
+					handle()
+					Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+				})
+
+				It("tries multiple times", func() {
+					handle()
+					// +1 because of the initial attempt
+					pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", grh.GetCommitsRetryLimit+1)
+				})
+			})
+
 			Context("with list of commits from GitHub NOT including fixup commits", func() {
 				BeforeEach(func() {
 					pullRequests.
@@ -120,6 +154,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							},
 							&github.RepositoryCommit{
+								SHA: github.String(pullRequestHeadSHA),
 								Commit: &github.Commit{
 									Message: github.String("Another casual commit"),
 								},
@@ -129,7 +164,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				It("reports success status to GitHub", func() {
 					repositories.
-						On("CreateStatus", headRepository.Owner, headRepository.Name, commitRevision,
+						On("CreateStatus", headRepository.Owner, headRepository.Name, pullRequestHeadSHA,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "success" && *status.Context == "review/squash"
 							}),
@@ -165,6 +200,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						}).
 						Return([]*github.RepositoryCommit{
 							&github.RepositoryCommit{
+								SHA: github.String(pullRequestHeadSHA),
 								Commit: &github.Commit{
 									Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
 								},
@@ -174,7 +210,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				It("reports pending squash status to GitHub", func() {
 					repositories.
-						On("CreateStatus", headRepository.Owner, headRepository.Name, commitRevision,
+						On("CreateStatus", headRepository.Owner, headRepository.Name, pullRequestHeadSHA,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "pending" && *status.Context == "review/squash"
 							}),

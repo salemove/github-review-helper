@@ -144,7 +144,7 @@ func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest,
 	return pr, nil
 }
 
-func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.RepositoryCommit, *ErrorResponse) {
+func getCommits(issueable Issueable, isExpectedHead func(string) bool, pullRequests PullRequests) ([]*github.RepositoryCommit, *ErrorResponse) {
 	issue := issueable.Issue()
 	pageNr := 1
 	nrOfRetriesLeft := GetCommitsRetryLimit
@@ -158,19 +158,44 @@ func getCommits(issueable Issueable, pullRequests PullRequests) ([]*github.Repos
 		if err != nil {
 			if is404Error(resp) && nrOfRetriesLeft > 0 {
 				log.Printf("Getting commits for PR %s failed with a 404: \"%s\". Trying again.\n", issue.FullName(), err.Error())
-				nrOfRetriesLeft = nrOfRetriesLeft - 1
+				nrOfRetriesLeft--
 				continue
 			}
 			message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
 			return nil, &ErrorResponse{err, http.StatusBadGateway, message}
 		}
+		isLastPage := resp.NextPage == 0
+		// Check if commit list is outdated by comparing the SHA of the
+		// received HEAD (last commit of the last page) with that of the
+		// expected HEAD.
+		if isLastPage && !isExpectedHead(*lastCommit(pageCommits).SHA) {
+			message := fmt.Sprintf(
+				"Getting commits for PR %s failed. Received an unexpected head with SHA of %s.",
+				issue.FullName(),
+				*lastCommit(pageCommits).SHA,
+			)
+			if nrOfRetriesLeft <= 0 {
+				return nil, &ErrorResponse{nil, http.StatusBadGateway, message}
+			}
+			log.Printf("%s. Trying again.\n", message)
+			// Retry from page 1. This means clearing all the existing commits
+			// and restoring the page counter to 1.
+			commits = []*github.RepositoryCommit{}
+			pageNr = 1
+			nrOfRetriesLeft--
+			continue
+		}
 		commits = append(commits, pageCommits...)
-		if resp.NextPage == 0 {
+		if isLastPage {
 			break
 		}
 		pageNr = resp.NextPage
 	}
 	return commits, nil
+}
+
+func lastCommit(commits []*github.RepositoryCommit) *github.RepositoryCommit {
+	return commits[len(commits)-1]
 }
 
 func addLabel(repository Repository, issueNumber int, label string, issues Issues) *ErrorResponse {

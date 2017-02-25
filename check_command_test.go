@@ -101,6 +101,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								},
 							},
 							&github.RepositoryCommit{
+								SHA: github.String(commitRevision),
 								Commit: &github.Commit{
 									Message: github.String("Another casual commit"),
 								},
@@ -158,6 +159,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						}).
 						Return([]*github.RepositoryCommit{
 							&github.RepositoryCommit{
+								SHA: github.String(commitRevision),
 								Commit: &github.Commit{
 									Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
 								},
