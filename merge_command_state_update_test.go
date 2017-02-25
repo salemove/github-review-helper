@@ -93,7 +93,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					searchQuery := fmt.Sprintf("%s label:\"%s\" is:open repo:%s/%s status:success",
 						mockSHA, grh.MergingLabel, repositoryOwner, repositoryName)
 					return search.
-						On("Issues", searchQuery, mock.MatchedBy(func(searchOptions *github.SearchOptions) bool {
+						On("Issues", anyContext, searchQuery, mock.MatchedBy(func(searchOptions *github.SearchOptions) bool {
 							return searchOptions.Page == pageNr
 						}))
 				}
@@ -146,7 +146,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					Context("with GitHub API request for that PR failing", func() {
 						BeforeEach(func() {
 							pullRequests.
-								On("Get", repositoryOwner, repositoryName, issueNumber).
+								On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 								Return(emptyResult, emptyResponse, errArbitrary)
 						})
 
@@ -176,7 +176,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 						BeforeEach(func() {
 							pullRequests.
-								On("Get", repositoryOwner, repositoryName, issueNumber).
+								On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 								Return(pr, emptyResponse, noError)
 						})
 
@@ -209,7 +209,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							},
 						}
 						pullRequests.
-							On("Get", repositoryOwner, repositoryName, number).
+							On("Get", anyContext, repositoryOwner, repositoryName, number).
 							Return(pr, emptyResponse, noError).
 							Once()
 						// Merge
@@ -217,6 +217,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						pullRequests.
 							On(
 								"Merge",
+								anyContext,
 								repositoryOwner,
 								repositoryName,
 								number,
@@ -229,7 +230,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Once()
 						// Remove label
 						issues.
-							On("RemoveLabelForIssue", repositoryOwner, repositoryName, number, grh.MergingLabel).
+							On("RemoveLabelForIssue", anyContext, repositoryOwner, repositoryName, number, grh.MergingLabel).
 							Return(emptyResponse, noError).
 							Once()
 						// Delete branch

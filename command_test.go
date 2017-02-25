@@ -28,7 +28,7 @@ func ForCollaborator(context WebhookTestContext, repoOwner, repoName, user strin
 	Context("with collaborator status check failing", func() {
 		BeforeEach(func() {
 			repositories.
-				On("IsCollaborator", repoOwner, repoName, user).
+				On("IsCollaborator", anyContext, repoOwner, repoName, user).
 				Return(false, emptyResponse, errArbitrary)
 		})
 
@@ -41,14 +41,14 @@ func ForCollaborator(context WebhookTestContext, repoOwner, repoName, user strin
 	Context("with user not being a collaborator", func() {
 		BeforeEach(func() {
 			repositories.
-				On("IsCollaborator", repoOwner, repoName, user).
+				On("IsCollaborator", anyContext, repoOwner, repoName, user).
 				Return(false, emptyResponse, noError)
 		})
 
 		Context("with sending a comment failing", func() {
 			BeforeEach(func() {
 				issues.
-					On("CreateComment", repoOwner, repoName,
+					On("CreateComment", anyContext, repoOwner, repoName,
 						issueNumber, mock.MatchedBy(commentMentioning(user))).
 					Return(emptyResult, emptyResponse, errArbitrary)
 			})
@@ -62,7 +62,7 @@ func ForCollaborator(context WebhookTestContext, repoOwner, repoName, user strin
 		Context("with sending a comment succeeding", func() {
 			BeforeEach(func() {
 				issues.
-					On("CreateComment", repoOwner, repoName,
+					On("CreateComment", anyContext, repoOwner, repoName,
 						issueNumber, mock.MatchedBy(commentMentioning(user))).
 					Return(emptyResult, emptyResponse, noError)
 			})
@@ -77,7 +77,7 @@ func ForCollaborator(context WebhookTestContext, repoOwner, repoName, user strin
 	Context("with user being a collaborator", func() {
 		BeforeEach(func() {
 			repositories.
-				On("IsCollaborator", repositoryOwner, repositoryName, user).
+				On("IsCollaborator", anyContext, repositoryOwner, repositoryName, user).
 				Return(true, emptyResponse, noError)
 		})
 

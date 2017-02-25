@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/hex"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
+	"github.com/stretchr/testify/mock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -46,6 +48,7 @@ var (
 	emptyResponse = &github.Response{Response: &http.Response{}}
 	noError       = (error)(nil)
 	errArbitrary  = errors.New("GitHub is down. Or something.")
+	anyContext    = mock.MatchedBy(func(ctx context.Context) bool { return true })
 )
 
 func TestGithubReviewHelper(t *testing.T) {

@@ -54,7 +54,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						resp, err := createGithubErrorResponse(http.StatusNotFound)
 						pullRequests.
-							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+							On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
 							Return(emptyResult, resp, err)
 					})
 
@@ -74,7 +74,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						resp, err := createGithubErrorResponse(http.StatusInternalServerError)
 						pullRequests.
-							On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+							On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
 							Return(emptyResult, resp, err)
 					})
 
@@ -93,7 +93,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			Context("with list of commits from GitHub NOT including fixup commits", func() {
 				BeforeEach(func() {
 					pullRequests.
-						On("ListCommits", repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
+						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
 						Return([]*github.RepositoryCommit{
 							&github.RepositoryCommit{
 								Commit: &github.Commit{
@@ -108,7 +108,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							},
 						}, &github.Response{}, noError)
 					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
+						On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 						Return(&github.PullRequest{
 							Number: github.Int(issueNumber),
 							Head: &github.PullRequestBranch{
@@ -123,7 +123,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				It("reports success status to GitHub", func() {
 					repositories.
-						On("CreateStatus", *headRepository.Owner.Login, *headRepository.Name, commitRevision,
+						On("CreateStatus", anyContext, *headRepository.Owner.Login, *headRepository.Name, commitRevision,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "success" && *status.Context == "review/squash"
 							}),
@@ -139,7 +139,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			Context("with paged list of commits from GitHub including fixup commits", func() {
 				BeforeEach(func() {
 					pullRequests.
-						On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
 							Page:    1,
 							PerPage: 30,
 						}).
@@ -153,7 +153,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							NextPage: 2,
 						}, noError)
 					pullRequests.
-						On("ListCommits", repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
 							Page:    2,
 							PerPage: 30,
 						}).
@@ -166,7 +166,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							},
 						}, emptyResponse, noError)
 					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
+						On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 						Return(&github.PullRequest{
 							Number: github.Int(issueNumber),
 							Head: &github.PullRequestBranch{
@@ -181,7 +181,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				It("reports pending squash status to GitHub", func() {
 					repositories.
-						On("CreateStatus", *headRepository.Owner.Login, *headRepository.Name, commitRevision,
+						On("CreateStatus", anyContext, *headRepository.Owner.Login, *headRepository.Name, commitRevision,
 							mock.MatchedBy(func(status *github.RepoStatus) bool {
 								return *status.State == "pending" && *status.Context == "review/squash"
 							}),
