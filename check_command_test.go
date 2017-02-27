@@ -94,19 +94,10 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				BeforeEach(func() {
 					pullRequests.
 						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return([]*github.RepositoryCommit{
-							&github.RepositoryCommit{
-								Commit: &github.Commit{
-									Message: github.String("Changing things"),
-								},
-							},
-							&github.RepositoryCommit{
-								SHA: github.String(commitRevision),
-								Commit: &github.Commit{
-									Message: github.String("Another casual commit"),
-								},
-							},
-						}, &github.Response{}, noError)
+						Return(githubCommits(
+							commit{arbitrarySHA, "Changing things"},
+							commit{commitRevision, "Another casual commit"},
+						), &github.Response{}, noError)
 					pullRequests.
 						On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 						Return(&github.PullRequest{
@@ -143,13 +134,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Page:    1,
 							PerPage: 30,
 						}).
-						Return([]*github.RepositoryCommit{
-							&github.RepositoryCommit{
-								Commit: &github.Commit{
-									Message: github.String("Changing things"),
-								},
-							},
-						}, &github.Response{
+						Return(githubCommits(
+							commit{arbitrarySHA, "Changing things"},
+						), &github.Response{
 							NextPage: 2,
 						}, noError)
 					pullRequests.
@@ -157,14 +144,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Page:    2,
 							PerPage: 30,
 						}).
-						Return([]*github.RepositoryCommit{
-							&github.RepositoryCommit{
-								SHA: github.String(commitRevision),
-								Commit: &github.Commit{
-									Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
-								},
-							},
-						}, emptyResponse, noError)
+						Return(githubCommits(
+							commit{commitRevision, "fixup! Changing things\n\nOopsie. Forgot a thing"},
+						), emptyResponse, noError)
 					pullRequests.
 						On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 						Return(&github.PullRequest{

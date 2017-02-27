@@ -33,6 +33,7 @@ const (
 	sshURL               = "git@github.com:salemove/github-review-helper.git"
 	issueNumber          = 7
 	arbitraryIssueAuthor = "author"
+	arbitrarySHA         = "1afdea0acb09ff392fcdb89acfa9d7e9feac4bc1"
 )
 
 var (
@@ -246,4 +247,21 @@ var createStatusEvent = func(sha, state string, branches []grh.Branch) string {
     "ssh_url": "` + sshURL + `"
   }
 }`
+}
+
+type commit struct {
+	SHA, Message string
+}
+
+var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
+	githubCommitList := make([]*github.RepositoryCommit, len(commitList))
+	for i, commitData := range commitList {
+		githubCommitList[i] = &github.RepositoryCommit{
+			SHA: github.String(commitData.SHA),
+			Commit: &github.Commit{
+				Message: github.String(commitData.Message),
+			},
+		}
+	}
+	return githubCommitList
 }

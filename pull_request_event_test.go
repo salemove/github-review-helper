@@ -116,19 +116,10 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				BeforeEach(func() {
 					pullRequests.
 						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return([]*github.RepositoryCommit{
-							&github.RepositoryCommit{
-								Commit: &github.Commit{
-									Message: github.String("Changing things"),
-								},
-							},
-							&github.RepositoryCommit{
-								SHA: github.String(headCommitRevision),
-								Commit: &github.Commit{
-									Message: github.String("Another casual commit"),
-								},
-							},
-						}, emptyResponse, noError)
+						Return(githubCommits(
+							commit{arbitrarySHA, "Changing things"},
+							commit{headCommitRevision, "Another casual commit"},
+						), emptyResponse, noError)
 				})
 
 				It("fails with a gateway error", func() {
@@ -147,19 +138,10 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				BeforeEach(func() {
 					pullRequests.
 						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, mock.AnythingOfType("*github.ListOptions")).
-						Return([]*github.RepositoryCommit{
-							&github.RepositoryCommit{
-								Commit: &github.Commit{
-									Message: github.String("Changing things"),
-								},
-							},
-							&github.RepositoryCommit{
-								SHA: github.String(pullRequestHeadSHA),
-								Commit: &github.Commit{
-									Message: github.String("Another casual commit"),
-								},
-							},
-						}, emptyResponse, noError)
+						Return(githubCommits(
+							commit{arbitrarySHA, "Changing things"},
+							commit{pullRequestHeadSHA, "Another casual commit"},
+						), emptyResponse, noError)
 				})
 
 				It("reports success status to GitHub", func() {
@@ -184,13 +166,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Page:    1,
 							PerPage: 30,
 						}).
-						Return([]*github.RepositoryCommit{
-							&github.RepositoryCommit{
-								Commit: &github.Commit{
-									Message: github.String("Changing things"),
-								},
-							},
-						}, &github.Response{
+						Return(githubCommits(
+							commit{arbitrarySHA, "Changing things"},
+						), &github.Response{
 							NextPage: 2,
 						}, noError)
 					pullRequests.
@@ -198,14 +176,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Page:    2,
 							PerPage: 30,
 						}).
-						Return([]*github.RepositoryCommit{
-							&github.RepositoryCommit{
-								SHA: github.String(pullRequestHeadSHA),
-								Commit: &github.Commit{
-									Message: github.String("fixup! Changing things\n\nOopsie. Forgot a thing"),
-								},
-							},
-						}, &github.Response{}, noError)
+						Return(githubCommits(
+							commit{pullRequestHeadSHA, "fixup! Changing things\n\nOopsie. Forgot a thing"},
+						), &github.Response{}, noError)
 				})
 
 				It("reports pending squash status to GitHub", func() {
