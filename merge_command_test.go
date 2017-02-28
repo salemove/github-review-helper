@@ -51,7 +51,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			Context("with github request to add the label failing", func() {
 				BeforeEach(func() {
 					issues.
-						On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
+						On("AddLabelsToIssue", anyContext, repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
 						Return(emptyResult, emptyResponse, errors.New("an error"))
 				})
 
@@ -64,14 +64,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			Context("with github request to add the label succeeding", func() {
 				BeforeEach(func() {
 					issues.
-						On("AddLabelsToIssue", repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
+						On("AddLabelsToIssue", anyContext, repositoryOwner, repositoryName, issueNumber, []string{grh.MergingLabel}).
 						Return(emptyResult, emptyResponse, noError)
 				})
 
 				Context("with fetching the PR failing", func() {
 					BeforeEach(func() {
 						pullRequests.
-							On("Get", repositoryOwner, repositoryName, issueNumber).
+							On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 							Return(emptyResult, emptyResponse, errors.New("an error"))
 					})
 
@@ -84,7 +84,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				Context("with the PR being already merged", func() {
 					BeforeEach(func() {
 						pullRequests.
-							On("Get", repositoryOwner, repositoryName, issueNumber).
+							On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 							Return(&github.PullRequest{
 								Merged: github.Bool(true),
 							}, emptyResponse, noError)
@@ -92,7 +92,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 					It("removes the 'merging' label from the PR", func() {
 						issues.
-							On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+							On("RemoveLabelForIssue", anyContext, repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
 							Return(emptyResponse, noError)
 
 						handle()
@@ -103,7 +103,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				Context("with the PR not being mergeable", func() {
 					BeforeEach(func() {
 						pullRequests.
-							On("Get", repositoryOwner, repositoryName, issueNumber).
+							On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 							Return(&github.PullRequest{
 								Merged:    github.Bool(false),
 								Mergeable: github.Bool(false),
@@ -139,14 +139,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 					BeforeEach(func() {
 						pullRequests.
-							On("Get", repositoryOwner, repositoryName, issueNumber).
+							On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 							Return(pr, emptyResponse, noError)
 					})
 
 					Context("with combined state being failing", func() {
 						BeforeEach(func() {
 							repositories.
-								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
+								On("GetCombinedStatus", anyContext, repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
 								Return(&github.CombinedStatus{
 									State: github.String("failing"),
 								}, emptyResponse, noError)
@@ -161,7 +161,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					Context("with a pending squash status in paged combined status request", func() {
 						BeforeEach(func() {
 							repositories.
-								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
+								On("GetCombinedStatus", anyContext, repositoryOwner, repositoryName, headSHA, &github.ListOptions{
 									Page:    1,
 									PerPage: 100,
 								}).
@@ -177,7 +177,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 									NextPage: 2,
 								}, noError)
 							repositories.
-								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, &github.ListOptions{
+								On("GetCombinedStatus", anyContext, repositoryOwner, repositoryName, headSHA, &github.ListOptions{
 									Page:    2,
 									PerPage: 100,
 								}).
@@ -198,7 +198,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					Context("with combined state being success", func() {
 						BeforeEach(func() {
 							repositories.
-								On("GetCombinedStatus", repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
+								On("GetCombinedStatus", anyContext, repositoryOwner, repositoryName, headSHA, mock.AnythingOfType("*github.ListOptions")).
 								Return(&github.CombinedStatus{
 									State: github.String("success"),
 								}, emptyResponse, noError)
@@ -259,6 +259,7 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 			pullRequests.
 				On(
 					"Merge",
+					anyContext,
 					repositoryOwner,
 					repositoryName,
 					issueNumber,
@@ -288,6 +289,7 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 			return pullRequests.
 				On(
 					"Merge",
+					anyContext,
 					repositoryOwner,
 					repositoryName,
 					issueNumber,
@@ -309,14 +311,14 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 		Context("with removing the label failing", func() {
 			BeforeEach(func() {
 				issues.
-					On("RemoveLabelForIssue", repositoryOwner, repositoryName,
+					On("RemoveLabelForIssue", anyContext, repositoryOwner, repositoryName,
 						issueNumber, grh.MergingLabel).
 					Return(emptyResponse, errors.New("arbitrary error"))
 			})
 
 			It("notifies PR author and fails with a gateway error", func() {
 				issues.
-					On("CreateComment", repositoryOwner, repositoryName,
+					On("CreateComment", anyContext, repositoryOwner, repositoryName,
 						issueNumber, mock.MatchedBy(commentMentioning(issueAuthor))).
 					Return(emptyResult, emptyResponse, noError)
 
@@ -331,7 +333,7 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 			Context("with author notification failing", func() {
 				BeforeEach(func() {
 					issues.
-						On("CreateComment", repositoryOwner, repositoryName,
+						On("CreateComment", anyContext, repositoryOwner, repositoryName,
 							issueNumber, mock.MatchedBy(commentMentioning(issueAuthor))).
 						Return(emptyResult, emptyResponse, errors.New("arbitrary error"))
 				})
@@ -349,11 +351,11 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 
 		It("removes the 'merging' label and notifies the author", func() {
 			issues.
-				On("RemoveLabelForIssue", repositoryOwner, repositoryName,
+				On("RemoveLabelForIssue", anyContext, repositoryOwner, repositoryName,
 					issueNumber, grh.MergingLabel).
 				Return(emptyResponse, noError)
 			issues.
-				On("CreateComment", repositoryOwner, repositoryName,
+				On("CreateComment", anyContext, repositoryOwner, repositoryName,
 					issueNumber, mock.MatchedBy(commentMentioning(issueAuthor))).
 				Return(emptyResult, emptyResponse, noError)
 
@@ -372,6 +374,7 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 			pullRequests.
 				On(
 					"Merge",
+					anyContext,
 					repositoryOwner,
 					repositoryName,
 					issueNumber,
@@ -403,6 +406,7 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 			pullRequests.
 				On(
 					"Merge",
+					anyContext,
 					repositoryOwner,
 					repositoryName,
 					issueNumber,
@@ -418,7 +422,7 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 		Context("with removing the 'merging' label failing", func() {
 			BeforeEach(func() {
 				issues.
-					On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+					On("RemoveLabelForIssue", anyContext, repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
 					Return(emptyResponse, errArbitrary)
 			})
 
@@ -435,7 +439,7 @@ var ItMergesPR = func(context WebhookTestContext, pr *github.PullRequest, opts .
 		Context("with removing the 'merging' label succeeding", func() {
 			BeforeEach(func() {
 				issues.
-					On("RemoveLabelForIssue", repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
+					On("RemoveLabelForIssue", anyContext, repositoryOwner, repositoryName, issueNumber, grh.MergingLabel).
 					Return(emptyResponse, noError)
 			})
 

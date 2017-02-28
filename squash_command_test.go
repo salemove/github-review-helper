@@ -42,7 +42,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			Context("with GitHub request failing", func() {
 				BeforeEach(func() {
 					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
+						On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 						Return(emptyResult, emptyResponse, errors.New("an error"))
 				})
 
@@ -69,7 +69,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 				BeforeEach(func() {
 					pullRequests.
-						On("Get", repositoryOwner, repositoryName, issueNumber).
+						On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 						Return(pr, emptyResponse, noError)
 				})
 
@@ -118,7 +118,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 		It("reports the failure", func() {
 			repositories.
-				On("CreateStatus", repositoryOwner, repositoryName, headSHA, mock.MatchedBy(func(status *github.RepoStatus) bool {
+				On("CreateStatus", anyContext, repositoryOwner, repositoryName, headSHA, mock.MatchedBy(func(status *github.RepoStatus) bool {
 					return *status.State == "failure" && *status.Context == "review/squash"
 				})).
 				Return(emptyResult, emptyResponse, noError)

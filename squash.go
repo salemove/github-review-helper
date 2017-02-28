@@ -29,13 +29,17 @@ func handleSquashCommand(issueComment IssueComment, gitRepos git.Repos, pullRequ
 }
 
 func checkForFixupCommitsOnPREvent(pullRequestEvent PullRequestEvent, pullRequests PullRequests, repositories Repositories) Response {
+	isExpectedHead := func(head string) bool {
+		return head == pullRequestEvent.Head.SHA
+	}
 	setStatus := func(status *github.RepoStatus) *ErrorResponse {
 		return setStatusForPREvent(pullRequestEvent, status, repositories)
 	}
-	return checkForFixupCommits(pullRequestEvent, setStatus, pullRequests)
+	return checkForFixupCommits(pullRequestEvent, isExpectedHead, setStatus, pullRequests)
 }
 
 func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
+	isExpectedHead := func(string) bool { return true }
 	setStatus := func(status *github.RepoStatus) *ErrorResponse {
 		pr, errResp := getPR(issueComment, pullRequests)
 		if errResp != nil {
@@ -43,12 +47,14 @@ func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests 
 		}
 		return setStatusForPR(pr, status, repositories)
 	}
-	return checkForFixupCommits(issueComment, setStatus, pullRequests)
+	return checkForFixupCommits(issueComment, isExpectedHead, setStatus, pullRequests)
 }
 
-func checkForFixupCommits(issueable Issueable, setStatus func(*github.RepoStatus) *ErrorResponse, pullRequests PullRequests) Response {
+func checkForFixupCommits(issueable Issueable, isExpectedHead func(string) bool,
+	setStatus func(*github.RepoStatus) *ErrorResponse, pullRequests PullRequests) Response {
+
 	log.Printf("Checking for fixup commits for PR %s.\n", issueable.Issue().FullName())
-	commits, errResp := getCommits(issueable, pullRequests)
+	commits, errResp := getCommits(issueable, isExpectedHead, pullRequests)
 	if errResp != nil {
 		return errResp
 	}

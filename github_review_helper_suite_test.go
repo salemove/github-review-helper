@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/hex"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
+	"github.com/stretchr/testify/mock"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,6 +33,7 @@ const (
 	sshURL               = "git@github.com:salemove/github-review-helper.git"
 	issueNumber          = 7
 	arbitraryIssueAuthor = "author"
+	arbitrarySHA         = "1afdea0acb09ff392fcdb89acfa9d7e9feac4bc1"
 )
 
 var (
@@ -46,6 +49,7 @@ var (
 	emptyResponse = &github.Response{Response: &http.Response{}}
 	noError       = (error)(nil)
 	errArbitrary  = errors.New("GitHub is down. Or something.")
+	anyContext    = mock.MatchedBy(func(ctx context.Context) bool { return true })
 )
 
 func TestGithubReviewHelper(t *testing.T) {
@@ -243,4 +247,21 @@ var createStatusEvent = func(sha, state string, branches []grh.Branch) string {
     "ssh_url": "` + sshURL + `"
   }
 }`
+}
+
+type commit struct {
+	SHA, Message string
+}
+
+var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
+	githubCommitList := make([]*github.RepositoryCommit, len(commitList))
+	for i, commitData := range commitList {
+		githubCommitList[i] = &github.RepositoryCommit{
+			SHA: github.String(commitData.SHA),
+			Commit: &github.Commit{
+				Message: github.String(commitData.Message),
+			},
+		}
+	}
+	return githubCommitList
 }
