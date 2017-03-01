@@ -265,3 +265,31 @@ var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
 	}
 	return githubCommitList
 }
+
+var mockListCommits = func(commits []*github.RepositoryCommit, perPage int, repositoryOwner,
+	repositoryName string, issueNumber int, pullRequests *mocks.PullRequests) {
+
+	pageNumber := 1
+	for {
+		pageStartIndex := (pageNumber - 1) * perPage
+		if len(commits) <= pageNumber*perPage {
+			commitsOnThisPage := commits[pageStartIndex:len(commits)]
+			pullRequests.
+				On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+					Page:    pageNumber,
+					PerPage: 30,
+				}).
+				Return(commitsOnThisPage, &github.Response{}, noError)
+			break
+		}
+
+		commitsOnThisPage := commits[pageStartIndex : pageNumber*perPage]
+		pullRequests.
+			On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+				Page:    pageNumber,
+				PerPage: 30,
+			}).
+			Return(commitsOnThisPage, &github.Response{NextPage: pageNumber + 1}, noError)
+		pageNumber++
+	}
+}
