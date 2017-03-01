@@ -183,6 +183,31 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 				})
 			})
+
+			Context("with paged list of commits in mixed order from GitHub including fixup commits", func() {
+				BeforeEach(func() {
+					perPage := 1
+					commits := githubCommitsInMixedOrder(
+						commit{arbitrarySHA, "Changing things"},
+						commit{pullRequestHeadSHA, "fixup! Changing things\n\nOopsie. Forgot a thing"},
+					)
+					mockListCommits(commits, perPage, repositoryOwner, repositoryName, issueNumber, pullRequests)
+				})
+
+				It("reports pending squash status to GitHub", func() {
+					repositories.
+						On("CreateStatus", anyContext, headRepository.Owner, headRepository.Name, pullRequestHeadSHA,
+							mock.MatchedBy(func(status *github.RepoStatus) bool {
+								return *status.State == "pending" && *status.Context == "review/squash"
+							}),
+						).
+						Return(emptyResult, emptyResponse, noError)
+
+					handle()
+
+					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+				})
+			})
 		})
 	})
 })
