@@ -129,24 +129,12 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 			Context("with paged list of commits from GitHub including fixup commits", func() {
 				BeforeEach(func() {
-					pullRequests.
-						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
-							Page:    1,
-							PerPage: 30,
-						}).
-						Return(githubCommits(
-							commit{arbitrarySHA, "Changing things"},
-						), &github.Response{
-							NextPage: 2,
-						}, noError)
-					pullRequests.
-						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
-							Page:    2,
-							PerPage: 30,
-						}).
-						Return(githubCommits(
-							commit{commitRevision, "fixup! Changing things\n\nOopsie. Forgot a thing"},
-						), emptyResponse, noError)
+					perPage := 1
+					commits := githubCommits(
+						commit{arbitrarySHA, "Changing things"},
+						commit{commitRevision, "fixup! Changing things\n\nOopsie. Forgot a thing"},
+					)
+					mockListCommits(commits, perPage, repositoryOwner, repositoryName, issueNumber, pullRequests)
 					pullRequests.
 						On("Get", anyContext, repositoryOwner, repositoryName, issueNumber).
 						Return(&github.PullRequest{

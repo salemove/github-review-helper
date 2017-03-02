@@ -253,6 +253,12 @@ type commit struct {
 	SHA, Message string
 }
 
+// arbitraryParentSHA is a SHA different from arbitrarySHA, to avoid cycles
+// and other issues in the commit list.
+const arbitraryParentSHA = "43c3c0c406518f3f326474f9e378027f86f27caf"
+
+// githubCommits returns an ordered list of github commits, where the HEAD
+// commit is the last one in the list.
 var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
 	githubCommitList := make([]*github.RepositoryCommit, len(commitList))
 	for i, commitData := range commitList {
@@ -262,6 +268,53 @@ var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
 				Message: github.String(commitData.Message),
 			},
 		}
+		if i > 0 {
+			githubCommitList[i].Parents = []github.Commit{
+				github.Commit{SHA: githubCommitList[i-1].SHA},
+			}
+		} else {
+			githubCommitList[i].Parents = []github.Commit{
+				github.Commit{SHA: github.String(arbitraryParentSHA)},
+			}
+		}
 	}
 	return githubCommitList
+}
+
+var githubCommitsInMixedOrder = func(commitList ...commit) []*github.RepositoryCommit {
+	githubCommitList := githubCommits(commitList...)
+	if len(githubCommitList) > 1 {
+		// swap 2 last elements
+		lastIndex := len(githubCommitList) - 1
+		githubCommitList[lastIndex], githubCommitList[lastIndex-1] = githubCommitList[lastIndex-1], githubCommitList[lastIndex]
+	}
+	return githubCommitList
+}
+
+var mockListCommits = func(commits []*github.RepositoryCommit, perPage int, repositoryOwner,
+	repositoryName string, issueNumber int, pullRequests *mocks.PullRequests) {
+
+	pageNumber := 1
+	for {
+		pageStartIndex := (pageNumber - 1) * perPage
+		if len(commits) <= pageNumber*perPage {
+			commitsOnThisPage := commits[pageStartIndex:len(commits)]
+			pullRequests.
+				On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+					Page:    pageNumber,
+					PerPage: 30,
+				}).
+				Return(commitsOnThisPage, &github.Response{}, noError)
+			break
+		}
+
+		commitsOnThisPage := commits[pageStartIndex : pageNumber*perPage]
+		pullRequests.
+			On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
+				Page:    pageNumber,
+				PerPage: 30,
+			}).
+			Return(commitsOnThisPage, &github.Response{NextPage: pageNumber + 1}, noError)
+		pageNumber++
+	}
 }

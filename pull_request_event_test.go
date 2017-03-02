@@ -161,24 +161,37 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 			Context("with paged list of commits from GitHub including fixup commits", func() {
 				BeforeEach(func() {
-					pullRequests.
-						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
-							Page:    1,
-							PerPage: 30,
-						}).
-						Return(githubCommits(
-							commit{arbitrarySHA, "Changing things"},
-						), &github.Response{
-							NextPage: 2,
-						}, noError)
-					pullRequests.
-						On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
-							Page:    2,
-							PerPage: 30,
-						}).
-						Return(githubCommits(
-							commit{pullRequestHeadSHA, "fixup! Changing things\n\nOopsie. Forgot a thing"},
-						), &github.Response{}, noError)
+					perPage := 1
+					commits := githubCommits(
+						commit{arbitrarySHA, "Changing things"},
+						commit{pullRequestHeadSHA, "fixup! Changing things\n\nOopsie. Forgot a thing"},
+					)
+					mockListCommits(commits, perPage, repositoryOwner, repositoryName, issueNumber, pullRequests)
+				})
+
+				It("reports pending squash status to GitHub", func() {
+					repositories.
+						On("CreateStatus", anyContext, headRepository.Owner, headRepository.Name, pullRequestHeadSHA,
+							mock.MatchedBy(func(status *github.RepoStatus) bool {
+								return *status.State == "pending" && *status.Context == "review/squash"
+							}),
+						).
+						Return(emptyResult, emptyResponse, noError)
+
+					handle()
+
+					Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+				})
+			})
+
+			Context("with paged list of commits in mixed order from GitHub including fixup commits", func() {
+				BeforeEach(func() {
+					perPage := 1
+					commits := githubCommitsInMixedOrder(
+						commit{arbitrarySHA, "Changing things"},
+						commit{pullRequestHeadSHA, "fixup! Changing things\n\nOopsie. Forgot a thing"},
+					)
+					mockListCommits(commits, perPage, repositoryOwner, repositoryName, issueNumber, pullRequests)
 				})
 
 				It("reports pending squash status to GitHub", func() {

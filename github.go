@@ -167,29 +167,31 @@ func getCommits(issueable Issueable, isExpectedHead func(string) bool, pullReque
 			message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
 			return nil, &ErrorResponse{err, http.StatusBadGateway, message}
 		}
-		isLastPage := resp.NextPage == 0
-		// Check if commit list is outdated by comparing the SHA of the
-		// received HEAD (last commit of the last page) with that of the
-		// expected HEAD.
-		if isLastPage && !isExpectedHead(*lastCommit(pageCommits).SHA) {
-			message := fmt.Sprintf(
-				"Getting commits for PR %s failed. Received an unexpected head with SHA of %s.",
-				issue.FullName(),
-				*lastCommit(pageCommits).SHA,
-			)
-			if nrOfRetriesLeft <= 0 {
-				return nil, &ErrorResponse{nil, http.StatusBadGateway, message}
-			}
-			log.Printf("%s. Trying again.\n", message)
-			// Retry from page 1. This means clearing all the existing commits
-			// and restoring the page counter to 1.
-			commits = []*github.RepositoryCommit{}
-			pageNr = 1
-			nrOfRetriesLeft--
-			continue
-		}
 		commits = append(commits, pageCommits...)
+		isLastPage := resp.NextPage == 0
 		if isLastPage {
+			// Check if commit list is outdated by comparing the SHA of the
+			// received HEAD with that of the expected HEAD.
+			if head, err := findTopologicalHead(commits); err != nil {
+				message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
+				return nil, &ErrorResponse{err, http.StatusInternalServerError, message}
+			} else if !isExpectedHead(*head.SHA) {
+				message := fmt.Sprintf(
+					"Getting commits for PR %s failed. Received an unexpected head with SHA of %s.",
+					issue.FullName(),
+					*head.SHA,
+				)
+				if nrOfRetriesLeft <= 0 {
+					return nil, &ErrorResponse{nil, http.StatusBadGateway, message}
+				}
+				log.Printf("%s. Trying again.\n", message)
+				// Retry from page 1. This means clearing all the existing commits
+				// and restoring the page counter to 1.
+				commits = []*github.RepositoryCommit{}
+				pageNr = 1
+				nrOfRetriesLeft--
+				continue
+			}
 			break
 		}
 		pageNr = resp.NextPage
@@ -197,8 +199,53 @@ func getCommits(issueable Issueable, isExpectedHead func(string) bool, pullReque
 	return commits, nil
 }
 
-func lastCommit(commits []*github.RepositoryCommit) *github.RepositoryCommit {
-	return commits[len(commits)-1]
+// findTopologicalHead is a dumb O(n*n) algorithm for finding the HEAD commit
+// from an unsorted list of commits that contain references to their parent
+// commits. HEAD commit is taken to be the commit that has no children, i.e. a
+// commit that no other commit refers to as a parent.
+func findTopologicalHead(commits []*github.RepositoryCommit) (*github.RepositoryCommit, error) {
+	// make defaults all values to false (bool's zero value)
+	hasChildren := make([]bool, len(commits))
+	// For every commit C, mark the commit's index in the hasChildren slice as
+	// true if there are other commits in the list that point to commit C as
+	// it's parent.
+OuterLoop:
+	for i, commit := range commits {
+		for j, childCandidate := range commits {
+			// The commit can't be a child of itself, so we can skip the
+			// following checks.
+			if i == j {
+				continue
+			}
+			for _, parentOfChildCandidate := range childCandidate.Parents {
+				if *parentOfChildCandidate.SHA == *commit.SHA {
+					hasChildren[i] = true
+					continue OuterLoop
+				}
+			}
+		}
+	}
+
+	// Find the index of the commit that doesn't have children
+	headCommitIndex := -1
+	for i, commitHasChildren := range hasChildren {
+		if commitHasChildren {
+			continue
+		} else if headCommitIndex != -1 {
+			return nil, fmt.Errorf(
+				"Multiple HEAD commits detected. Both %s and %s have no children.",
+				*commits[i].SHA,
+				*commits[headCommitIndex].SHA,
+			)
+		}
+
+		headCommitIndex = i
+	}
+	if headCommitIndex == -1 {
+		return nil, errors.New("Couldn't find the HEAD commit. Every commit in the list has children.")
+	}
+
+	return commits[headCommitIndex], nil
 }
 
 func addLabel(repository Repository, issueNumber int, label string, issues Issues) *ErrorResponse {
