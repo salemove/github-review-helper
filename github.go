@@ -204,48 +204,42 @@ func getCommits(issueable Issueable, isExpectedHead func(string) bool, pullReque
 // commits. HEAD commit is taken to be the commit that has no children, i.e. a
 // commit that no other commit refers to as a parent.
 func findTopologicalHead(commits []*github.RepositoryCommit) (*github.RepositoryCommit, error) {
-	// make defaults all values to false (bool's zero value)
-	hasChildren := make([]bool, len(commits))
-	// For every commit C, mark the commit's index in the hasChildren slice as
-	// true if there are other commits in the list that point to commit C as
-	// it's parent.
-OuterLoop:
-	for i, commit := range commits {
-		for j, childCandidate := range commits {
-			// The commit can't be a child of itself, so we can skip the
-			// following checks.
-			if i == j {
-				continue
-			}
-			for _, parentOfChildCandidate := range childCandidate.Parents {
-				if *parentOfChildCandidate.SHA == *commit.SHA {
-					hasChildren[i] = true
-					continue OuterLoop
-				}
-			}
-		}
-	}
-
-	// Find the index of the commit that doesn't have children
 	headCommitIndex := -1
-	for i, commitHasChildren := range hasChildren {
-		if commitHasChildren {
+	for i, commit := range commits {
+		if hasChildren(commit, commits) {
+			// Found a child. This is not the HEAD. Keep looking.
 			continue
-		} else if headCommitIndex != -1 {
+		}
+
+		// Another HEAD commit already detected. This code expects the list of
+		// commits to only hold one such commit.
+		if headCommitIndex != -1 {
 			return nil, fmt.Errorf(
 				"Multiple HEAD commits detected. Both %s and %s have no children.",
-				*commits[i].SHA,
+				*commit.SHA,
 				*commits[headCommitIndex].SHA,
 			)
 		}
-
+		// Couldn't find any children for this commit. It must be the HEAD.
 		headCommitIndex = i
 	}
+
 	if headCommitIndex == -1 {
 		return nil, errors.New("Couldn't find the HEAD commit. Every commit in the list has children.")
 	}
 
 	return commits[headCommitIndex], nil
+}
+
+func hasChildren(commit *github.RepositoryCommit, childCandidateList []*github.RepositoryCommit) bool {
+	for _, childCandidate := range childCandidateList {
+		for _, parentOfChildCandidate := range childCandidate.Parents {
+			if *parentOfChildCandidate.SHA == *commit.SHA {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func addLabel(repository Repository, issueNumber int, label string, issues Issues) *ErrorResponse {
