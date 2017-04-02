@@ -270,11 +270,11 @@ var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
 		}
 		if i > 0 {
 			githubCommitList[i].Parents = []github.Commit{
-				github.Commit{SHA: githubCommitList[i-1].SHA},
+				{SHA: githubCommitList[i-1].SHA},
 			}
 		} else {
 			githubCommitList[i].Parents = []github.Commit{
-				github.Commit{SHA: github.String(arbitraryParentSHA)},
+				{SHA: github.String(arbitraryParentSHA)},
 			}
 		}
 	}
@@ -298,7 +298,7 @@ var mockListCommits = func(commits []*github.RepositoryCommit, perPage int, repo
 	for {
 		pageStartIndex := (pageNumber - 1) * perPage
 		if len(commits) <= pageNumber*perPage {
-			commitsOnThisPage := commits[pageStartIndex:len(commits)]
+			commitsOnThisPage := commits[pageStartIndex:]
 			pullRequests.
 				On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
 					Page:    pageNumber,

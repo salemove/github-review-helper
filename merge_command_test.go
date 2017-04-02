@@ -168,7 +168,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								Return(&github.CombinedStatus{
 									State: github.String("pending"),
 									Statuses: []github.RepoStatus{
-										github.RepoStatus{
+										{
 											Context: github.String("jenkins/pr"),
 											State:   github.String("success"),
 										},
@@ -184,7 +184,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								Return(&github.CombinedStatus{
 									State: github.String("pending"),
 									Statuses: []github.RepoStatus{
-										github.RepoStatus{
+										{
 											Context: github.String("review/squash"),
 											State:   github.String("pending"),
 										},
