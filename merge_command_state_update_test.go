@@ -109,6 +109,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						handle()
 						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 					})
+
+					It("tries once", func() {
+						handle()
+						search.AssertNumberOfCalls(GinkgoT(), "Issues", 1)
+					})
 				})
 
 				Context("with issue search return 0 PRs", func() {
@@ -123,6 +128,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					It("returns 200 OK", func() {
 						handle()
 						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+					})
+
+					It("tries once", func() {
+						handle()
+						search.AssertNumberOfCalls(GinkgoT(), "Issues", 1)
 					})
 				})
 
@@ -155,6 +165,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						It("returns 200 OK", func() {
 							handle()
 							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						})
+
+						It("tries once", func() {
+							handle()
+							search.AssertNumberOfCalls(GinkgoT(), "Issues", 1)
 						})
 					})
 
