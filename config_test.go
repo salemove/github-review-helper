@@ -208,6 +208,18 @@ var _ = Describe("Config", func() {
 			})
 		})
 
+		Context("when contains negative durations", func() {
+			durationsString := "2m,2h,-2h"
+			setEnvVars(requiredEnvVars)
+			setEnvVar(envVar{name: name, value: durationsString})
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+
 		Context("when not set", func() {
 			setEnvVars(requiredEnvVars)
 

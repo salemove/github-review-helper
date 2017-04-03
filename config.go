@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,16 +40,21 @@ func NewConfig() Config {
 		panic(err)
 	}
 
+	githubAPITryDeltas, err := getDeltasFromDurationsString(githubAPITriesProperty.Value())
+	if err != nil {
+		panic(fmt.Sprintf("Failed to get deltas from GITHUB_API_TRIES durations string: %v", err))
+	}
+
 	return Config{
 		Port:               port,
 		AccessToken:        accessTokenProperty.Value(),
 		Secret:             secretProperty.Value(),
 		GithubAPIDelay:     githubAPIDelay,
-		GithubAPITryDeltas: getDeltasFromDurationsString(githubAPITriesProperty.Value()),
+		GithubAPITryDeltas: githubAPITryDeltas,
 	}
 }
 
-func getDeltasFromDurationsString(durationsString string) []time.Duration {
+func getDeltasFromDurationsString(durationsString string) ([]time.Duration, error) {
 	durationStringList := strings.Split(durationsString, ",")
 	durationList := make([]time.Duration, len(durationStringList))
 	for i, durationString := range durationStringList {
@@ -59,6 +65,11 @@ func getDeltasFromDurationsString(durationsString string) []time.Duration {
 		}
 	}
 	sort.Slice(durationList, func(i, j int) bool { return durationList[i] < durationList[j] })
+	// After sorting, the first element will be the smallest, so checking the
+	// first value for negative durations is enough.
+	if durationList[0] < 0 {
+		return nil, fmt.Errorf("Unable to parse \"%s\" - negative durations are not supported.", durationsString)
+	}
 
 	deltas := make([]time.Duration, len(durationList))
 	for i, duration := range durationList {
@@ -68,5 +79,5 @@ func getDeltasFromDurationsString(durationsString string) []time.Duration {
 			deltas[i] = duration - durationList[i-1]
 		}
 	}
-	return deltas
+	return deltas, nil
 }
