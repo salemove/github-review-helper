@@ -136,6 +136,87 @@ var _ = Describe("Config", func() {
 			})
 		})
 	})
+
+	Describe("GITHUB_API_TRIES", func() {
+		name := "GITHUB_API_TRIES"
+
+		Context("when set to sorted durations", func() {
+			durationsString := "0s,2m,2h,4h"
+			setEnvVars(requiredEnvVars)
+			setEnvVar(envVar{name: name, value: durationsString})
+
+			It("is passed as an array of duration deltas", func() {
+				conf := grh.NewConfig()
+				Expect(conf.GithubAPITryDeltas).To(Equal([]time.Duration{
+					0,
+					2 * time.Minute,
+					time.Hour + 58*time.Minute,
+					2 * time.Hour,
+				}))
+			})
+		})
+
+		Context("when set to unsorted durations", func() {
+			durationsString := "0s,2h,2m,4h"
+			setEnvVars(requiredEnvVars)
+			setEnvVar(envVar{name: name, value: durationsString})
+
+			It("is passed as a sorted array of duration deltas", func() {
+				conf := grh.NewConfig()
+				Expect(conf.GithubAPITryDeltas).To(Equal([]time.Duration{
+					0,
+					2 * time.Minute,
+					time.Hour + 58*time.Minute,
+					2 * time.Hour,
+				}))
+			})
+		})
+
+		Context("when contains an invalid duration", func() {
+			durationsString := "two minutes,2h"
+			setEnvVars(requiredEnvVars)
+			setEnvVar(envVar{name: name, value: durationsString})
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+
+		Context("when contains an empty duration", func() {
+			durationsString := ",2h"
+			setEnvVars(requiredEnvVars)
+			setEnvVar(envVar{name: name, value: durationsString})
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+
+		Context("when contains spaces", func() {
+			durationsString := "2m, 2h"
+			setEnvVars(requiredEnvVars)
+			setEnvVar(envVar{name: name, value: durationsString})
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+
+		Context("when not set", func() {
+			setEnvVars(requiredEnvVars)
+
+			It("defaults to a value", func() {
+				conf := grh.NewConfig()
+				Expect(conf.GithubAPITryDeltas).NotTo(BeNil())
+			})
+		})
+	})
 })
 
 var setEnvVar = func(variable envVar) {
