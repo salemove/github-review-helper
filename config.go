@@ -15,7 +15,9 @@ var (
 	accessTokenProperty = gonfigure.NewRequiredEnvProperty("GITHUB_ACCESS_TOKEN")
 	secretProperty      = gonfigure.NewRequiredEnvProperty("GITHUB_SECRET")
 	// A comma separated list of durations in the format defined in
-	// time.ParseDuration. E.g. "300ms,1.5h,2h45m".
+	// time.ParseDuration. E.g. "300ms,1.5h,2h45m". When first duration is 0,
+	// then GitHub API requests will initially be tried synchronously and only
+	// the retries will be asynchronous.
 	githubAPITriesProperty = gonfigure.NewEnvProperty("GITHUB_API_TRIES", "0s,10s,30s,3m")
 )
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -14,7 +15,47 @@ type asyncResponse struct {
 	MayBeRetried bool
 }
 
+// MaybeSyncResponse can be returned from operations which may or may not
+// complete synchronously. When OperationFinishedSynchronously is true, then
+// Response will be specified.
+type MaybeSyncResponse struct {
+	Response
+	OperationFinishedSynchronously bool
+}
+
+func syncResponse(response Response) MaybeSyncResponse {
+	return MaybeSyncResponse{
+		Response:                       response,
+		OperationFinishedSynchronously: true,
+	}
+}
+
 func delayWithRetries(tryDelays []time.Duration, operation func() asyncResponse,
+	asyncOperationWg *sync.WaitGroup) (MaybeSyncResponse, error) {
+
+	if len(tryDelays) < 1 {
+		return MaybeSyncResponse{}, errors.New("Cannot schedule any delayed operations when tryDelays is empty")
+	}
+
+	if tryDelays[0] == 0 {
+		response := operation()
+		if len(tryDelays) > 1 && response.MayBeRetried {
+			log.Println("Operation will be retried")
+			if err := asyncDelayWithRetries(tryDelays[1:], operation, asyncOperationWg); err != nil {
+				return MaybeSyncResponse{}, fmt.Errorf("Failed to schedule async retries: %v", err)
+			}
+			return MaybeSyncResponse{OperationFinishedSynchronously: false}, nil
+		}
+		return syncResponse(response), nil
+	}
+
+	if err := asyncDelayWithRetries(tryDelays, operation, asyncOperationWg); err != nil {
+		return MaybeSyncResponse{}, fmt.Errorf("Failed to schedule async delay with retries: %v", err)
+	}
+	return MaybeSyncResponse{OperationFinishedSynchronously: false}, nil
+}
+
+func asyncDelayWithRetries(tryDelays []time.Duration, operation func() asyncResponse,
 	asyncOperationWg *sync.WaitGroup) error {
 
 	if len(tryDelays) < 1 {
@@ -26,7 +67,7 @@ func delayWithRetries(tryDelays []time.Duration, operation func() asyncResponse,
 		handleAsyncResponse(response.Response)
 		if len(tryDelays) > 1 && response.MayBeRetried {
 			log.Println("Operation will be retried")
-			if err := delayWithRetries(tryDelays[1:], operation, asyncOperationWg); err != nil {
+			if err := asyncDelayWithRetries(tryDelays[1:], operation, asyncOperationWg); err != nil {
 				log.Printf("Failed to schedule another try to start in %s\n", tryDelays[1].String())
 				return
 			}

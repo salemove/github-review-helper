@@ -108,8 +108,13 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 
 			githubAPITryDeltas := make([]time.Duration, numberOfGithubTries)
 			for i := range githubAPITryDeltas {
-				// Try every 1ms
-				githubAPITryDeltas[i] = time.Millisecond
+				if i == 0 {
+					// Allow the first try to be synchronous
+					githubAPITryDeltas[i] = 0
+				} else {
+					// Try every 1ms
+					githubAPITryDeltas[i] = time.Millisecond
+				}
 			}
 			conf = grh.Config{
 				Secret:             "a-secret",

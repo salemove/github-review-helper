@@ -103,11 +103,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						mockSearchQuery(1).Return(emptyResult, emptyResponse, errors.New("arbitrary error"))
 					})
 
-					// async errors are logged, but won't affect the outcome of
-					// the HTTP request
-					It("returns 200 OK", func() {
+					It("fails with a gateway error", func() {
 						handle()
-						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
 					})
 
 					It("tries once", func() {
@@ -160,11 +158,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								Return(emptyResult, emptyResponse, errArbitrary)
 						})
 
-						// async errors are logged, but won't affect the outcome of
-						// the HTTP request
-						It("returns 200 OK", func() {
+						It("fails with a gateway error", func() {
 							handle()
-							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
 						})
 
 						It("tries once", func() {
@@ -195,8 +191,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								Return(pr, emptyResponse, noError)
 						})
 
-						isAsync := true
-						ItMergesPR(context, pr, isAsync)
+						ItMergesPR(context, pr)
 					})
 				})
 
