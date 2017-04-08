@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -34,6 +35,7 @@ const (
 	issueNumber          = 7
 	arbitraryIssueAuthor = "author"
 	arbitrarySHA         = "1afdea0acb09ff392fcdb89acfa9d7e9feac4bc1"
+	numberOfGithubTries  = 4
 )
 
 var (
@@ -104,9 +106,16 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 
 			*responseRecorder = httptest.NewRecorder()
 
-			conf = grh.Config{
-				Secret: "a-secret",
+			githubAPITryDeltas := make([]time.Duration, numberOfGithubTries)
+			for i := range githubAPITryDeltas {
+				// Try every 1ms
+				githubAPITryDeltas[i] = time.Millisecond
 			}
+			conf = grh.Config{
+				Secret:             "a-secret",
+				GithubAPITryDeltas: githubAPITryDeltas,
+			}
+
 			asyncOperationWg = &sync.WaitGroup{}
 			*handler = grh.CreateHandler(conf, *gitRepos, asyncOperationWg, *pullRequests,
 				*repositories, *issues, *search)
