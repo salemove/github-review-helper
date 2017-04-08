@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/go-github/github"
 	"github.com/salemove/github-review-helper/git"
@@ -28,17 +30,21 @@ func handleSquashCommand(issueComment IssueComment, gitRepos git.Repos, pullRequ
 	return squashAndReportFailure(pr, gitRepos, repositories)
 }
 
-func checkForFixupCommitsOnPREvent(pullRequestEvent PullRequestEvent, pullRequests PullRequests, repositories Repositories) Response {
+func checkForFixupCommitsOnPREvent(pullRequestEvent PullRequestEvent, pullRequests PullRequests,
+	repositories Repositories, conf Config, asyncOperationWg *sync.WaitGroup) Response {
+
 	isExpectedHead := func(head string) bool {
 		return head == pullRequestEvent.Head.SHA
 	}
 	setStatus := func(status *github.RepoStatus) *ErrorResponse {
 		return setStatusForPREvent(pullRequestEvent, status, repositories)
 	}
-	return checkForFixupCommits(pullRequestEvent, isExpectedHead, setStatus, pullRequests)
+	return checkForFixupCommits(pullRequestEvent, isExpectedHead, setStatus, pullRequests, conf, asyncOperationWg)
 }
 
-func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests PullRequests, repositories Repositories) Response {
+func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests PullRequests,
+	repositories Repositories, conf Config, asyncOperationWg *sync.WaitGroup) Response {
+
 	isExpectedHead := func(string) bool { return true }
 	setStatus := func(status *github.RepoStatus) *ErrorResponse {
 		pr, errResp := getPR(issueComment, pullRequests)
@@ -47,29 +53,41 @@ func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests 
 		}
 		return setStatusForPR(pr, status, repositories)
 	}
-	return checkForFixupCommits(issueComment, isExpectedHead, setStatus, pullRequests)
+	return checkForFixupCommits(issueComment, isExpectedHead, setStatus, pullRequests, conf, asyncOperationWg)
 }
 
 func checkForFixupCommits(issueable Issueable, isExpectedHead func(string) bool,
-	setStatus func(*github.RepoStatus) *ErrorResponse, pullRequests PullRequests) Response {
+	setStatus func(*github.RepoStatus) *ErrorResponse, pullRequests PullRequests,
+	conf Config, asyncOperationWg *sync.WaitGroup) Response {
 
 	log.Printf("Checking for fixup commits for PR %s.\n", issueable.Issue().FullName())
-	commits, errResp := getCommits(issueable, isExpectedHead, pullRequests)
-	if errResp != nil {
-		return errResp
-	}
-	if !includesFixupCommits(commits) {
-		status := createSquashStatus("success", "No fixup! or squash! commits to be squashed")
-		if errResp := setStatus(status); errResp != nil {
-			return errResp
+	maybeSyncResponse, err := delayWithRetries(conf.GithubAPITryDeltas, func() asyncResponse {
+		commits, asyncErrResp := getCommits(issueable, isExpectedHead, pullRequests)
+		if asyncErrResp != nil {
+			return asyncErrResp.toAsyncResponse()
 		}
-		return SuccessResponse{}
+		if !includesFixupCommits(commits) {
+			status := createSquashStatus("success", "No fixup! or squash! commits to be squashed")
+			if errResp := setStatus(status); errResp != nil {
+				return nonRetriable(errResp)
+			}
+			return nonRetriable(SuccessResponse{})
+		}
+		status := createSquashStatus("pending", "This PR needs to be squashed with !squash before merging")
+		if errResp := setStatus(status); errResp != nil {
+			return nonRetriable(errResp)
+		}
+		return nonRetriable(SuccessResponse{})
+	}, asyncOperationWg)
+	if err != nil {
+		return ErrorResponse{err, http.StatusInternalServerError, "Failed to schedule checking for fixup commits"}
+	} else if maybeSyncResponse.OperationFinishedSynchronously {
+		return maybeSyncResponse.Response
 	}
-	status := createSquashStatus("pending", "This PR needs to be squashed with !squash before merging")
-	if errResp := setStatus(status); errResp != nil {
-		return errResp
-	}
-	return SuccessResponse{}
+	return SuccessResponse{fmt.Sprintf(
+		"Continuing checking for fixup commits for PR %s asynchronously.",
+		issueable.Issue().FullName(),
+	)}
 }
 
 func includesFixupCommits(commits []*github.RepositoryCommit) bool {

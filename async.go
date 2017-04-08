@@ -15,6 +15,11 @@ type asyncResponse struct {
 	MayBeRetried bool
 }
 
+type asyncErrorResponse struct {
+	ErrorResponse
+	MayBeRetried bool
+}
+
 // MaybeSyncResponse can be returned from operations which may or may not
 // complete synchronously. When OperationFinishedSynchronously is true, then
 // Response will be specified.
@@ -111,5 +116,26 @@ func nonRetriable(response Response) asyncResponse {
 	return asyncResponse{
 		Response:     response,
 		MayBeRetried: false,
+	}
+}
+
+func retriableError(errResp ErrorResponse) *asyncErrorResponse {
+	return &asyncErrorResponse{
+		ErrorResponse: errResp,
+		MayBeRetried:  true,
+	}
+}
+
+func nonRetriableError(errResp ErrorResponse) *asyncErrorResponse {
+	return &asyncErrorResponse{
+		ErrorResponse: errResp,
+		MayBeRetried:  false,
+	}
+}
+
+func (a asyncErrorResponse) toAsyncResponse() asyncResponse {
+	return asyncResponse{
+		Response:     a.ErrorResponse,
+		MayBeRetried: a.MayBeRetried,
 	}
 }

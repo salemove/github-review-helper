@@ -61,9 +61,9 @@ func CreateHandler(conf Config, gitRepos git.Repos, asyncOperationWg *sync.WaitG
 		eventType := r.Header.Get("X-Github-Event")
 		switch eventType {
 		case "issue_comment":
-			return handleIssueComment(body, gitRepos, pullRequests, repositories, issues)
+			return handleIssueComment(body, conf, asyncOperationWg, gitRepos, pullRequests, repositories, issues)
 		case "pull_request":
-			return handlePullRequestEvent(body, pullRequests, repositories)
+			return handlePullRequestEvent(body, conf, asyncOperationWg, pullRequests, repositories)
 		case "status":
 			return handleStatusEvent(body, conf, asyncOperationWg, gitRepos, search, issues, pullRequests)
 		}
@@ -71,7 +71,10 @@ func CreateHandler(conf Config, gitRepos git.Repos, asyncOperationWg *sync.WaitG
 	}
 }
 
-func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories, issues Issues) Response {
+func handleIssueComment(body []byte, conf Config, asyncOperationWg *sync.WaitGroup,
+	gitRepos git.Repos, pullRequests PullRequests, repositories Repositories,
+	issues Issues) Response {
+
 	issueComment, err := parseIssueComment(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
@@ -94,7 +97,7 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 	case mergeCommand:
 		return handleMergeCommand(issueComment, issues, pullRequests, repositories, gitRepos)
 	case checkCommand:
-		return checkForFixupCommitsOnIssueComment(issueComment, pullRequests, repositories)
+		return checkForFixupCommitsOnIssueComment(issueComment, pullRequests, repositories, conf, asyncOperationWg)
 	}
 	return ErrorResponse{
 		Code:         http.StatusInternalServerError,
@@ -102,14 +105,16 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 	}
 }
 
-func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories Repositories) Response {
+func handlePullRequestEvent(body []byte, conf Config, asyncOperationWg *sync.WaitGroup,
+	pullRequests PullRequests, repositories Repositories) Response {
+
 	pullRequestEvent, err := parsePullRequestEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	} else if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
-	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories)
+	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories, conf, asyncOperationWg)
 }
 
 func handleStatusEvent(body []byte, conf Config, asyncOperationWg *sync.WaitGroup, gitRepos git.Repos, search Search,
