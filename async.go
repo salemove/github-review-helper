@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func delay(duration time.Duration, operation func() Response, asyncOperationWg *sync.WaitGroup) {
+func delay(duration time.Duration, operation func(), asyncOperationWg *sync.WaitGroup) {
 	interruptChan := make(chan os.Signal, 1)
 	signal.Notify(interruptChan, os.Interrupt)
 
@@ -27,7 +27,6 @@ func delay(duration time.Duration, operation func() Response, asyncOperationWg *
 		case <-timer.C:
 		}
 
-		response := operation()
-		handleAsyncResponse(response)
+		operation()
 	}()
 }

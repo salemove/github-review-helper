@@ -118,8 +118,9 @@ func handleStatusEvent(body []byte, conf Config, asyncOperationWg *sync.WaitGrou
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	} else if newPullRequestsPossiblyReadyForMerging(statusEvent) {
-		delay(conf.GithubAPIDelay, func() Response {
-			return mergePullRequestsReadyForMerging(statusEvent, gitRepos, search, issues, pullRequests)
+		delay(conf.GithubAPIDelay, func() {
+			response := mergePullRequestsReadyForMerging(statusEvent, gitRepos, search, issues, pullRequests)
+			handleAsyncResponse(response)
 		}, asyncOperationWg)
 		return SuccessResponse{
 			fmt.Sprintf("Status update might have caused a PR to become mergeable. Scheduled an operation "+
