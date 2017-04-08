@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/google/go-github/github"
 	"github.com/salemove/github-review-helper/git"
@@ -31,7 +30,7 @@ func handleSquashCommand(issueComment IssueComment, gitRepos git.Repos, pullRequ
 }
 
 func checkForFixupCommitsOnPREvent(pullRequestEvent PullRequestEvent, pullRequests PullRequests,
-	repositories Repositories, conf Config, asyncOperationWg *sync.WaitGroup) Response {
+	repositories Repositories, retry retryGithubOperation) Response {
 
 	isExpectedHead := func(head string) bool {
 		return head == pullRequestEvent.Head.SHA
@@ -39,11 +38,11 @@ func checkForFixupCommitsOnPREvent(pullRequestEvent PullRequestEvent, pullReques
 	setStatus := func(status *github.RepoStatus) *ErrorResponse {
 		return setStatusForPREvent(pullRequestEvent, status, repositories)
 	}
-	return checkForFixupCommits(pullRequestEvent, isExpectedHead, setStatus, pullRequests, conf, asyncOperationWg)
+	return checkForFixupCommits(pullRequestEvent, isExpectedHead, setStatus, pullRequests, retry)
 }
 
 func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests PullRequests,
-	repositories Repositories, conf Config, asyncOperationWg *sync.WaitGroup) Response {
+	repositories Repositories, retry retryGithubOperation) Response {
 
 	isExpectedHead := func(string) bool { return true }
 	setStatus := func(status *github.RepoStatus) *ErrorResponse {
@@ -53,15 +52,15 @@ func checkForFixupCommitsOnIssueComment(issueComment IssueComment, pullRequests 
 		}
 		return setStatusForPR(pr, status, repositories)
 	}
-	return checkForFixupCommits(issueComment, isExpectedHead, setStatus, pullRequests, conf, asyncOperationWg)
+	return checkForFixupCommits(issueComment, isExpectedHead, setStatus, pullRequests, retry)
 }
 
 func checkForFixupCommits(issueable Issueable, isExpectedHead func(string) bool,
 	setStatus func(*github.RepoStatus) *ErrorResponse, pullRequests PullRequests,
-	conf Config, asyncOperationWg *sync.WaitGroup) Response {
+	retry retryGithubOperation) Response {
 
 	log.Printf("Checking for fixup commits for PR %s.\n", issueable.Issue().FullName())
-	maybeSyncResponse := delayWithRetries(conf.GithubAPITryDeltas, func() asyncResponse {
+	maybeSyncResponse := retry(func() asyncResponse {
 		commits, asyncErrResp := getCommits(issueable, isExpectedHead, pullRequests)
 		if asyncErrResp != nil {
 			return asyncErrResp.toAsyncResponse()
@@ -78,7 +77,7 @@ func checkForFixupCommits(issueable Issueable, isExpectedHead func(string) bool,
 			return nonRetriable(errResp)
 		}
 		return nonRetriable(SuccessResponse{})
-	}, asyncOperationWg)
+	})
 	if maybeSyncResponse.OperationFinishedSynchronously {
 		return maybeSyncResponse.Response
 	}
