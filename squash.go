@@ -61,7 +61,7 @@ func checkForFixupCommits(issueable Issueable, isExpectedHead func(string) bool,
 	conf Config, asyncOperationWg *sync.WaitGroup) Response {
 
 	log.Printf("Checking for fixup commits for PR %s.\n", issueable.Issue().FullName())
-	maybeSyncResponse, err := delayWithRetries(conf.GithubAPITryDeltas, func() asyncResponse {
+	maybeSyncResponse := delayWithRetries(conf.GithubAPITryDeltas, func() asyncResponse {
 		commits, asyncErrResp := getCommits(issueable, isExpectedHead, pullRequests)
 		if asyncErrResp != nil {
 			return asyncErrResp.toAsyncResponse()
@@ -79,9 +79,7 @@ func checkForFixupCommits(issueable Issueable, isExpectedHead func(string) bool,
 		}
 		return nonRetriable(SuccessResponse{})
 	}, asyncOperationWg)
-	if err != nil {
-		return ErrorResponse{err, http.StatusInternalServerError, "Failed to schedule checking for fixup commits"}
-	} else if maybeSyncResponse.OperationFinishedSynchronously {
+	if maybeSyncResponse.OperationFinishedSynchronously {
 		return maybeSyncResponse.Response
 	}
 	return SuccessResponse{fmt.Sprintf(

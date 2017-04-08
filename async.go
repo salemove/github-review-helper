@@ -2,8 +2,8 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -36,10 +36,13 @@ func syncResponse(response Response) MaybeSyncResponse {
 }
 
 func delayWithRetries(tryDelays []time.Duration, operation func() asyncResponse,
-	asyncOperationWg *sync.WaitGroup) (MaybeSyncResponse, error) {
+	asyncOperationWg *sync.WaitGroup) MaybeSyncResponse {
 
 	if len(tryDelays) < 1 {
-		return MaybeSyncResponse{}, errors.New("Cannot schedule any delayed operations when tryDelays is empty")
+		return syncResponse(ErrorResponse{
+			Code:         http.StatusInternalServerError,
+			ErrorMessage: "Cannot schedule any delayed operations when tryDelays is empty",
+		})
 	}
 
 	if tryDelays[0] == 0 {
@@ -47,17 +50,21 @@ func delayWithRetries(tryDelays []time.Duration, operation func() asyncResponse,
 		if len(tryDelays) > 1 && response.MayBeRetried {
 			log.Println("Operation will be retried")
 			if err := asyncDelayWithRetries(tryDelays[1:], operation, asyncOperationWg); err != nil {
-				return MaybeSyncResponse{}, fmt.Errorf("Failed to schedule async retries: %v", err)
+				return syncResponse(
+					ErrorResponse{err, http.StatusInternalServerError, "Failed to schedule async retries"},
+				)
 			}
-			return MaybeSyncResponse{OperationFinishedSynchronously: false}, nil
+			return MaybeSyncResponse{OperationFinishedSynchronously: false}
 		}
-		return syncResponse(response), nil
+		return syncResponse(response)
 	}
 
 	if err := asyncDelayWithRetries(tryDelays, operation, asyncOperationWg); err != nil {
-		return MaybeSyncResponse{}, fmt.Errorf("Failed to schedule async delay with retries: %v", err)
+		return syncResponse(
+			ErrorResponse{err, http.StatusInternalServerError, "Failed to schedule async delay with retries"},
+		)
 	}
-	return MaybeSyncResponse{OperationFinishedSynchronously: false}, nil
+	return MaybeSyncResponse{OperationFinishedSynchronously: false}
 }
 
 func asyncDelayWithRetries(tryDelays []time.Duration, operation func() asyncResponse,
