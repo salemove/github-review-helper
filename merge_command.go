@@ -114,15 +114,9 @@ func mergePullRequestsReadyForMerging(statusEvent StatusEvent, gitRepos git.Repo
 	issuesToMerge, err := searchIssues(query, search)
 	if err != nil {
 		message := fmt.Sprintf("Searching for issues with query '%s' failed", query)
-		return asyncResponse{
-			Response:     ErrorResponse{err, http.StatusBadGateway, message},
-			MayBeRetried: false,
-		}
+		return nonRetriable(ErrorResponse{err, http.StatusBadGateway, message})
 	} else if len(issuesToMerge) == 0 {
-		return asyncResponse{
-			Response:     SuccessResponse{"Found no PRs to merge"},
-			MayBeRetried: true,
-		}
+		return retriable(SuccessResponse{"Found no PRs to merge"})
 	}
 
 	var finalErrResp *ErrorResponse
@@ -155,15 +149,11 @@ func mergePullRequestsReadyForMerging(statusEvent StatusEvent, gitRepos git.Repo
 		}
 	}
 	if finalErrResp != nil {
-		return asyncResponse{
-			Response:     finalErrResp,
-			MayBeRetried: false,
-		}
+		return nonRetriable(finalErrResp)
 	}
-	return asyncResponse{
-		Response:     SuccessResponse{fmt.Sprintf("Successfully merged %d PRs", len(issuesToMerge))},
-		MayBeRetried: false,
-	}
+	return nonRetriable(
+		SuccessResponse{fmt.Sprintf("Successfully merged %d PRs", len(issuesToMerge))},
+	)
 }
 
 func containsPendingSquashStatus(statuses []github.RepoStatus) bool {

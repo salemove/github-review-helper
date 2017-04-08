@@ -99,3 +99,17 @@ func delay(duration time.Duration, operation func(), asyncOperationWg *sync.Wait
 		operation()
 	}()
 }
+
+func retriable(response Response) asyncResponse {
+	return asyncResponse{
+		Response:     response,
+		MayBeRetried: true,
+	}
+}
+
+func nonRetriable(response Response) asyncResponse {
+	return asyncResponse{
+		Response:     response,
+		MayBeRetried: false,
+	}
+}
