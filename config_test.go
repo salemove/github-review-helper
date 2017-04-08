@@ -101,42 +101,6 @@ var _ = Describe("Config", func() {
 		})
 	})
 
-	Describe("GITHUB_API_DELAY", func() {
-		name := "GITHUB_API_DELAY"
-
-		Context("when set", func() {
-			duration := "2m"
-			setEnvVars(requiredEnvVars)
-			setEnvVar(envVar{name: name, value: duration})
-
-			It("is passed as a duration", func() {
-				conf := grh.NewConfig()
-				Expect(conf.GithubAPIDelay).To(Equal(2 * time.Minute))
-			})
-		})
-
-		Context("when not a valid duration", func() {
-			duration := "two minutes"
-			setEnvVars(requiredEnvVars)
-			setEnvVar(envVar{name: name, value: duration})
-
-			It("panics", func() {
-				Expect(func() {
-					grh.NewConfig()
-				}).To(Panic())
-			})
-		})
-
-		Context("when not set", func() {
-			setEnvVars(requiredEnvVars)
-
-			It("defaults to a value", func() {
-				conf := grh.NewConfig()
-				Expect(conf.GithubAPIDelay).NotTo(BeNil())
-			})
-		})
-	})
-
 	Describe("GITHUB_API_TRIES", func() {
 		name := "GITHUB_API_TRIES"
 

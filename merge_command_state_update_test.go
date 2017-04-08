@@ -130,9 +130,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 					})
 
-					It("tries once", func() {
+					It("tries the configured amount of times", func() {
 						handle()
-						search.AssertNumberOfCalls(GinkgoT(), "Issues", 1)
+						search.AssertNumberOfCalls(GinkgoT(), "Issues", numberOfGithubTries)
 					})
 				})
 
