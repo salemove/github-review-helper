@@ -93,7 +93,7 @@ func mergeReadyPR(pr *github.PullRequest, gitRepos git.Repos, issues Issues,
 }
 
 func mergePullRequestsReadyForMerging(statusEvent StatusEvent, gitRepos git.Repos, search Search,
-	issues Issues, pullRequests PullRequests) Response {
+	issues Issues, pullRequests PullRequests) asyncResponse {
 	// Not sure if applying the additional repo:owner/name filter to the query
 	// works for cross-fork PRs, but nothing else has been tested with
 	// cross-fork PRs either so this is left in for now.
@@ -114,9 +114,9 @@ func mergePullRequestsReadyForMerging(statusEvent StatusEvent, gitRepos git.Repo
 	issuesToMerge, err := searchIssues(query, search)
 	if err != nil {
 		message := fmt.Sprintf("Searching for issues with query '%s' failed", query)
-		return ErrorResponse{err, http.StatusBadGateway, message}
+		return nonRetriable(ErrorResponse{err, http.StatusBadGateway, message})
 	} else if len(issuesToMerge) == 0 {
-		return SuccessResponse{"Found no PRs to merge"}
+		return retriable(SuccessResponse{"Found no PRs to merge"})
 	}
 
 	var finalErrResp *ErrorResponse
@@ -149,9 +149,11 @@ func mergePullRequestsReadyForMerging(statusEvent StatusEvent, gitRepos git.Repo
 		}
 	}
 	if finalErrResp != nil {
-		return finalErrResp
+		return nonRetriable(finalErrResp)
 	}
-	return SuccessResponse{fmt.Sprintf("Successfully merged %d PRs", len(issuesToMerge))}
+	return nonRetriable(
+		SuccessResponse{fmt.Sprintf("Successfully merged %d PRs", len(issuesToMerge))},
+	)
 }
 
 func containsPendingSquashStatus(statuses []github.RepoStatus) bool {

@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
-	"os/signal"
 	"sync"
 	"time"
 
@@ -22,6 +20,8 @@ const (
 	githubStatusSquashContext     = "review/squash"
 	githubStatusPeerReviewContext = "review/peer"
 )
+
+type retryGithubOperation func(func() asyncResponse) MaybeSyncResponse
 
 func main() {
 	conf := NewConfig()
@@ -50,8 +50,13 @@ func main() {
 	asyncOperationWg.Wait()
 }
 
-func CreateHandler(conf Config, gitRepos git.Repos, asyncOperationWg *sync.WaitGroup, pullRequests PullRequests,
-	repositories Repositories, issues Issues, search Search) Handler {
+func CreateHandler(conf Config, gitRepos git.Repos, asyncOperationWg *sync.WaitGroup,
+	pullRequests PullRequests, repositories Repositories, issues Issues, search Search) Handler {
+
+	retry := func(operation func() asyncResponse) MaybeSyncResponse {
+		return delayWithRetries(conf.GithubAPITryDeltas, operation, asyncOperationWg)
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) Response {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -63,17 +68,19 @@ func CreateHandler(conf Config, gitRepos git.Repos, asyncOperationWg *sync.WaitG
 		eventType := r.Header.Get("X-Github-Event")
 		switch eventType {
 		case "issue_comment":
-			return handleIssueComment(body, gitRepos, pullRequests, repositories, issues)
+			return handleIssueComment(body, retry, gitRepos, pullRequests, repositories, issues)
 		case "pull_request":
-			return handlePullRequestEvent(body, pullRequests, repositories)
+			return handlePullRequestEvent(body, retry, pullRequests, repositories)
 		case "status":
-			return handleStatusEvent(body, conf, asyncOperationWg, gitRepos, search, issues, pullRequests)
+			return handleStatusEvent(body, retry, gitRepos, search, issues, pullRequests)
 		}
 		return SuccessResponse{"Not an event I understand. Ignoring."}
 	}
 }
 
-func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullRequests, repositories Repositories, issues Issues) Response {
+func handleIssueComment(body []byte, retry retryGithubOperation, gitRepos git.Repos,
+	pullRequests PullRequests, repositories Repositories, issues Issues) Response {
+
 	issueComment, err := parseIssueComment(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
@@ -96,7 +103,7 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 	case mergeCommand:
 		return handleMergeCommand(issueComment, issues, pullRequests, repositories, gitRepos)
 	case checkCommand:
-		return checkForFixupCommitsOnIssueComment(issueComment, pullRequests, repositories)
+		return checkForFixupCommitsOnIssueComment(issueComment, pullRequests, repositories, retry)
 	}
 	return ErrorResponse{
 		Code:         http.StatusInternalServerError,
@@ -104,29 +111,33 @@ func handleIssueComment(body []byte, gitRepos git.Repos, pullRequests PullReques
 	}
 }
 
-func handlePullRequestEvent(body []byte, pullRequests PullRequests, repositories Repositories) Response {
+func handlePullRequestEvent(body []byte, retry retryGithubOperation, pullRequests PullRequests,
+	repositories Repositories) Response {
+
 	pullRequestEvent, err := parsePullRequestEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	} else if !(pullRequestEvent.Action == "opened" || pullRequestEvent.Action == "synchronize") {
 		return SuccessResponse{"PR not opened or synchronized. Ignoring."}
 	}
-	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories)
+	return checkForFixupCommitsOnPREvent(pullRequestEvent, pullRequests, repositories, retry)
 }
 
-func handleStatusEvent(body []byte, conf Config, asyncOperationWg *sync.WaitGroup, gitRepos git.Repos, search Search,
+func handleStatusEvent(body []byte, retry retryGithubOperation, gitRepos git.Repos, search Search,
 	issues Issues, pullRequests PullRequests) Response {
+
 	statusEvent, err := parseStatusEvent(body)
 	if err != nil {
 		return ErrorResponse{err, http.StatusInternalServerError, "Failed to parse the request's body"}
 	} else if newPullRequestsPossiblyReadyForMerging(statusEvent) {
-		delay(conf.GithubAPIDelay, func() Response {
+		maybeSyncResponse := retry(func() asyncResponse {
 			return mergePullRequestsReadyForMerging(statusEvent, gitRepos, search, issues, pullRequests)
-		}, asyncOperationWg)
-		return SuccessResponse{
-			fmt.Sprintf("Status update might have caused a PR to become mergeable. Scheduled an operation "+
-				"which will start in %s to check for mergeable PRs.", conf.GithubAPIDelay.String()),
+		})
+		if maybeSyncResponse.OperationFinishedSynchronously {
+			return maybeSyncResponse.Response
 		}
+		return SuccessResponse{"Status update might have caused a PR to become mergeable. Will check for " +
+			"mergeable PRs asynchronously"}
 	}
 	return SuccessResponse{"Status update does not affect any PRs mergeability. Ignoring."}
 }
@@ -190,28 +201,4 @@ func checkUserAuthorization(issueComment IssueComment, issues Issues, repositori
 			" Responded with a comment. Ignoring the command."}, nil
 	}
 	return nil, nil
-}
-
-func delay(duration time.Duration, operation func() Response, asyncOperationWg *sync.WaitGroup) {
-	interruptChan := make(chan os.Signal, 1)
-	signal.Notify(interruptChan, os.Interrupt)
-
-	timer := time.NewTimer(duration)
-
-	asyncOperationWg.Add(1)
-	go func() {
-		defer asyncOperationWg.Done()
-		// Avoid leaking channels
-		defer signal.Stop(interruptChan)
-
-		// Block until either of the 2 channels receives.
-		select {
-		case <-interruptChan:
-			log.Println("Received an interrupt signal (SIGINT). Starting a scheduled process immediately.")
-		case <-timer.C:
-		}
-
-		response := operation()
-		handleAsyncResponse(response)
-	}()
 }

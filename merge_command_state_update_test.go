@@ -46,7 +46,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 		for _, badStatus := range []string{"pending", "failure", "error"} {
 			Context("with "+badStatus+" status", func() {
-				branches := []grh.Branch{grh.Branch{
+				branches := []grh.Branch{{
 					SHA: mockSHA,
 				}}
 
@@ -66,7 +66,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 			Context("when updating a commit that is not a branch's head", func() {
 				otherSHA := "4eaf26faa8819ab5aee991461b8c4fff41778f41"
-				branches := []grh.Branch{grh.Branch{
+				branches := []grh.Branch{{
 					SHA: otherSHA,
 				}}
 
@@ -81,7 +81,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			})
 
 			Context("when updating a commit that is a branch's head", func() {
-				branches := []grh.Branch{grh.Branch{
+				branches := []grh.Branch{{
 					SHA: mockSHA,
 				}}
 
@@ -103,11 +103,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						mockSearchQuery(1).Return(emptyResult, emptyResponse, errors.New("arbitrary error"))
 					})
 
-					// async errors are logged, but won't affect the outcome of
-					// the HTTP request
-					It("returns 200 OK", func() {
+					It("fails with a gateway error", func() {
 						handle()
-						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+					})
+
+					It("tries once", func() {
+						handle()
+						search.AssertNumberOfCalls(GinkgoT(), "Issues", 1)
 					})
 				})
 
@@ -124,6 +127,11 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						handle()
 						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 					})
+
+					It("tries the configured amount of times", func() {
+						handle()
+						search.AssertNumberOfCalls(GinkgoT(), "Issues", numberOfGithubTries)
+					})
 				})
 
 				Context("with issue search returning a PR", func() {
@@ -133,7 +141,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						searchResult := &github.IssuesSearchResult{
 							Total: github.Int(1),
-							Issues: []github.Issue{github.Issue{
+							Issues: []github.Issue{{
 								Number: github.Int(issueNumber),
 								User: &github.User{
 									Login: github.String(userName),
@@ -150,11 +158,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								Return(emptyResult, emptyResponse, errArbitrary)
 						})
 
-						// async errors are logged, but won't affect the outcome of
-						// the HTTP request
-						It("returns 200 OK", func() {
+						It("fails with a gateway error", func() {
 							handle()
-							Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+							Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+						})
+
+						It("tries once", func() {
+							handle()
+							search.AssertNumberOfCalls(GinkgoT(), "Issues", 1)
 						})
 					})
 
@@ -180,8 +191,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								Return(pr, emptyResponse, noError)
 						})
 
-						isAsync := true
-						ItMergesPR(context, pr, isAsync)
+						ItMergesPR(context, pr)
 					})
 				})
 
@@ -245,7 +255,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						firstPageSearchResult := &github.IssuesSearchResult{
 							Total: github.Int(1),
-							Issues: []github.Issue{github.Issue{
+							Issues: []github.Issue{{
 								Number: github.Int(firstIssueNumber),
 								User: &github.User{
 									Login: github.String(firstAuthor),
@@ -254,7 +264,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						}
 						secondPageSearchResult := &github.IssuesSearchResult{
 							Total: github.Int(1),
-							Issues: []github.Issue{github.Issue{
+							Issues: []github.Issue{{
 								Number: github.Int(secondIssueNumber),
 								User: &github.User{
 									Login: github.String(secondAuthor),

@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 
 	"github.com/google/go-github/github"
-	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
 
@@ -58,15 +57,15 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 							Return(emptyResult, resp, err)
 					})
 
-					It("fails with a gateway error", func() {
+					// Responds with 200, because the operation will be retries asynchronously
+					It("responds with 200 OK", func() {
 						handle()
-						Expect(responseRecorder.Code).To(Equal(http.StatusBadGateway))
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
 					})
 
-					It("tries multiple times", func() {
+					It("tries the configured amount of times", func() {
 						handle()
-						// +1 because of the initial attempt
-						pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", grh.GetCommitsRetryLimit+1)
+						pullRequests.AssertNumberOfCalls(GinkgoT(), "ListCommits", numberOfGithubTries)
 					})
 				})
 

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/go-github/github"
 	grh "github.com/salemove/github-review-helper"
@@ -34,6 +35,7 @@ const (
 	issueNumber          = 7
 	arbitraryIssueAuthor = "author"
 	arbitrarySHA         = "1afdea0acb09ff392fcdb89acfa9d7e9feac4bc1"
+	numberOfGithubTries  = 4
 )
 
 var (
@@ -104,9 +106,21 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 
 			*responseRecorder = httptest.NewRecorder()
 
-			conf = grh.Config{
-				Secret: "a-secret",
+			githubAPITryDeltas := make([]time.Duration, numberOfGithubTries)
+			for i := range githubAPITryDeltas {
+				if i == 0 {
+					// Allow the first try to be synchronous
+					githubAPITryDeltas[i] = 0
+				} else {
+					// Try every 1ms
+					githubAPITryDeltas[i] = time.Millisecond
+				}
 			}
+			conf = grh.Config{
+				Secret:             "a-secret",
+				GithubAPITryDeltas: githubAPITryDeltas,
+			}
+
 			asyncOperationWg = &sync.WaitGroup{}
 			*handler = grh.CreateHandler(conf, *gitRepos, asyncOperationWg, *pullRequests,
 				*repositories, *issues, *search)
@@ -270,11 +284,11 @@ var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
 		}
 		if i > 0 {
 			githubCommitList[i].Parents = []github.Commit{
-				github.Commit{SHA: githubCommitList[i-1].SHA},
+				{SHA: githubCommitList[i-1].SHA},
 			}
 		} else {
 			githubCommitList[i].Parents = []github.Commit{
-				github.Commit{SHA: github.String(arbitraryParentSHA)},
+				{SHA: github.String(arbitraryParentSHA)},
 			}
 		}
 	}
@@ -298,7 +312,7 @@ var mockListCommits = func(commits []*github.RepositoryCommit, perPage int, repo
 	for {
 		pageStartIndex := (pageNumber - 1) * perPage
 		if len(commits) <= pageNumber*perPage {
-			commitsOnThisPage := commits[pageStartIndex:len(commits)]
+			commitsOnThisPage := commits[pageStartIndex:]
 			pullRequests.
 				On("ListCommits", anyContext, repositoryOwner, repositoryName, issueNumber, &github.ListOptions{
 					Page:    pageNumber,

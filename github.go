@@ -10,10 +10,6 @@ import (
 	"github.com/google/go-github/github"
 )
 
-const (
-	GetCommitsRetryLimit = 3
-)
-
 var ErrNotMergeable = errors.New("PullRequests is not mergeable.")
 var ErrMergeConflict = errors.New("Merge failed because of a merge conflict.")
 
@@ -146,10 +142,11 @@ func getPR(issueable Issueable, pullRequests PullRequests) (*github.PullRequest,
 	return pr, nil
 }
 
-func getCommits(issueable Issueable, isExpectedHead func(string) bool, pullRequests PullRequests) ([]*github.RepositoryCommit, *ErrorResponse) {
+func getCommits(issueable Issueable, isExpectedHead func(string) bool,
+	pullRequests PullRequests) ([]*github.RepositoryCommit, *asyncErrorResponse) {
+
 	issue := issueable.Issue()
 	pageNr := 1
-	nrOfRetriesLeft := GetCommitsRetryLimit
 	commits := []*github.RepositoryCommit{}
 	for {
 		listOptions := &github.ListOptions{
@@ -159,13 +156,16 @@ func getCommits(issueable Issueable, isExpectedHead func(string) bool, pullReque
 		pageCommits, resp, err := pullRequests.ListCommits(context.TODO(), issue.Repository.Owner,
 			issue.Repository.Name, issue.Number, listOptions)
 		if err != nil {
-			if is404Error(resp) && nrOfRetriesLeft > 0 {
-				log.Printf("Getting commits for PR %s failed with a 404: \"%s\". Trying again.\n", issue.FullName(), err.Error())
-				nrOfRetriesLeft--
-				continue
+			if is404Error(resp) {
+				message := fmt.Sprintf(
+					"Getting commits for PR %s failed with a 404: \"%s\".",
+					issue.FullName(),
+					err.Error(),
+				)
+				return nil, retriableError(ErrorResponse{err, http.StatusBadGateway, message})
 			}
 			message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
-			return nil, &ErrorResponse{err, http.StatusBadGateway, message}
+			return nil, nonRetriableError(ErrorResponse{err, http.StatusBadGateway, message})
 		}
 		commits = append(commits, pageCommits...)
 		isLastPage := resp.NextPage == 0
@@ -173,24 +173,15 @@ func getCommits(issueable Issueable, isExpectedHead func(string) bool, pullReque
 			// Check if commit list is outdated by comparing the SHA of the
 			// received HEAD with that of the expected HEAD.
 			if head, err := findTopologicalHead(commits); err != nil {
-				message := fmt.Sprintf("Getting commits for PR %s failed", issue.FullName())
-				return nil, &ErrorResponse{err, http.StatusInternalServerError, message}
+				message := fmt.Sprintf("Finding topological HEAD for PR %s failed", issue.FullName())
+				return nil, nonRetriableError(ErrorResponse{err, http.StatusInternalServerError, message})
 			} else if !isExpectedHead(*head.SHA) {
 				message := fmt.Sprintf(
 					"Getting commits for PR %s failed. Received an unexpected head with SHA of %s.",
 					issue.FullName(),
 					*head.SHA,
 				)
-				if nrOfRetriesLeft <= 0 {
-					return nil, &ErrorResponse{nil, http.StatusBadGateway, message}
-				}
-				log.Printf("%s. Trying again.\n", message)
-				// Retry from page 1. This means clearing all the existing commits
-				// and restoring the page counter to 1.
-				commits = []*github.RepositoryCommit{}
-				pageNr = 1
-				nrOfRetriesLeft--
-				continue
+				return nil, retriableError(ErrorResponse{nil, http.StatusBadGateway, message})
 			}
 			break
 		}
