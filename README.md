@@ -5,6 +5,9 @@
 [![GoDoc](https://godoc.org/github.com/salemove/github-review-helper?status.svg)](https://godoc.org/github.com/salemove/github-review-helper)
 
 ## What?
+
+**See [here](doc/intro.md)** for a high-level introduction.
+
 **github-review-helper** is a little bot that you can set up GitHub hooks for to improve your project's PR review flow.
 It currently does 4 things:
 
