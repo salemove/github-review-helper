@@ -15,7 +15,7 @@ const (
 )
 
 func isMergeCommand(comment string) bool {
-	return strings.TrimSpace(comment) == "!merge"
+	return strings.HasPrefix(strings.TrimSpace(comment), "!merge")
 }
 
 func newPullRequestsPossiblyReadyForMerging(statusEvent StatusEvent) bool {
