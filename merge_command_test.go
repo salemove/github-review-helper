@@ -213,6 +213,14 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 
 							ItMergesPR(context, pr)
 						})
+
+						Context("with a '!merge this' comment with newlines", func() {
+							requestJSON.Is(func() string {
+								return IssueCommentEvent("!merge\n\nthis", issueAuthor)
+							})
+
+							ItMergesPR(context, pr)
+						})
 					})
 				})
 			})
