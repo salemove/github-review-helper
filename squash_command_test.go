@@ -110,7 +110,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 	Context("with autosquash and push failing due to a squash conflict", func() {
 		BeforeEach(func() {
-			squashErr := &git.ErrSquashConflict{errors.New("merge conflict")}
+			squashErr := &git.ErrSquashConflict{Err: errors.New("merge conflict")}
 			gitRepo.
 				On("AutosquashAndPush", "origin/"+baseRef, headSHA, headRef).
 				Return(squashErr)

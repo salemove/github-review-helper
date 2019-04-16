@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/salemove/github-review-helper/mocks"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,11 +16,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			requestJSON = context.RequestJSON
 
 			responseRecorder *httptest.ResponseRecorder
-			pullRequests     *mocks.PullRequests
 		)
 		BeforeEach(func() {
 			responseRecorder = *context.ResponseRecorder
-			pullRequests = *context.PullRequests
 		})
 
 		Context("with an empty X-Hub-Signature header", func() {

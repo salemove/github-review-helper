@@ -40,7 +40,7 @@ const (
 
 var (
 	repository = &github.Repository{
-		ID: github.Int(repositoryID),
+		ID: github.Int64(repositoryID),
 		Owner: &github.User{
 			Login: github.String(repositoryOwner),
 		},
