@@ -101,6 +101,18 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						Expect(responseRecorder.Body.String()).To(ContainSubstring("Ignoring"))
 					})
 				})
+
+				Context("with a '!mergethis' comment (without space after '!merge')", func() {
+					requestJSON.Is(func() string {
+						return IssueCommentEvent("!mergethis", arbitraryIssueAuthor)
+					})
+
+					It("succeeds with 'ignored' response", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						Expect(responseRecorder.Body.String()).To(ContainSubstring("Ignoring"))
+					})
+				})
 			})
 		})
 	})

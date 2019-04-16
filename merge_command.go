@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	mergeCommandPattern = regexp.MustCompile(`^\s*!merge.*$`)
+	mergeCommandPattern = regexp.MustCompile(`^\s*!merge(\s.*)?$`)
 )
 
 func isMergeCommand(comment string) bool {
