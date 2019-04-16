@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/salemove/github-review-helper/mocks"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -18,11 +16,9 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 			requestJSON = context.RequestJSON
 
 			responseRecorder *httptest.ResponseRecorder
-			pullRequests     *mocks.PullRequests
 		)
 		BeforeEach(func() {
 			responseRecorder = *context.ResponseRecorder
-			pullRequests = *context.PullRequests
 		})
 
 		Context("with an empty X-Hub-Signature header", func() {
@@ -97,6 +93,18 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				Context("with an arbitrary comment", func() {
 					requestJSON.Is(func() string {
 						return IssueCommentEvent("just a simple comment", arbitraryIssueAuthor)
+					})
+
+					It("succeeds with 'ignored' response", func() {
+						handle()
+						Expect(responseRecorder.Code).To(Equal(http.StatusOK))
+						Expect(responseRecorder.Body.String()).To(ContainSubstring("Ignoring"))
+					})
+				})
+
+				Context("with a '!mergethis' comment (without space after '!merge')", func() {
+					requestJSON.Is(func() string {
+						return IssueCommentEvent("!mergethis", arbitraryIssueAuthor)
 					})
 
 					It("succeeds with 'ignored' response", func() {

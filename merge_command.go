@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
+	"regexp"
 
 	"github.com/google/go-github/github"
 	"github.com/salemove/github-review-helper/git"
@@ -14,8 +14,12 @@ const (
 	MergingLabel = "merging"
 )
 
+var (
+	mergeCommandPattern = regexp.MustCompile(`(?s)^\s*!merge(\s.*)?$`)
+)
+
 func isMergeCommand(comment string) bool {
-	return strings.TrimSpace(comment) == "!merge"
+	return mergeCommandPattern.MatchString(comment)
 }
 
 func newPullRequestsPossiblyReadyForMerging(statusEvent StatusEvent) bool {

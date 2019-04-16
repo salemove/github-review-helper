@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"log"
@@ -40,7 +41,7 @@ const (
 
 var (
 	repository = &github.Repository{
-		ID: github.Int(repositoryID),
+		ID: github.Int64(repositoryID),
 		Owner: &github.User{
 			Login: github.String(repositoryOwner),
 		},
@@ -180,6 +181,10 @@ var TestWebhookHandler = func(test WebhookTest) bool {
 }
 
 var IssueCommentEvent = func(comment, issueAuthor string) string {
+	commentMsg, err := json.Marshal(comment)
+	if err != nil {
+		panic(err)
+	}
 	return `{
   "issue": {
     "number": ` + strconv.Itoa(issueNumber) + `,
@@ -191,7 +196,7 @@ var IssueCommentEvent = func(comment, issueAuthor string) string {
     }
   },
   "comment": {
-    "body": "` + comment + `"
+    "body": ` + string(commentMsg) + `
   },
   "repository": {
     "name": "` + repositoryName + `",
