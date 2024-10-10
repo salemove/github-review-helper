@@ -46,7 +46,7 @@ related changes can not be expected to have come from the same commit.
 
 This approach has gained popularity since GitHub added this option to their PR
 merge button. And it does avoid the problem of completeness introduced by the
-previous approach, but it has it's own problems. When a PR is very small, then
+previous approach, but it has its own problems. When a PR is very small, then
 this approach actually works amazingly well. It breaks down, however, when a PR
 has a bit more going on. Its main problem is that it breaks the rule which
 states that commits should be [focused][2], they should only do _one thing_ (a
