@@ -1,6 +1,5 @@
 # github-review-helper
 
-[![Build Status](https://travis-ci.org/salemove/github-review-helper.svg?branch=master)](https://travis-ci.org/salemove/github-review-helper)
 [![Coverage](http://gocover.io/_badge/github.com/salemove/github-review-helper?0)](http://gocover.io/github.com/salemove/github-review-helper)
 [![GoDoc](https://godoc.org/github.com/salemove/github-review-helper?status.svg)](https://godoc.org/github.com/salemove/github-review-helper)
 

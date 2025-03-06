@@ -1,4 +1,4 @@
-FROM golang
+FROM 662491802882.dkr.ecr.us-east-1.amazonaws.com/golang:1.23-20250306-b193
 
 ENV PORT 80
 EXPOSE $PORT
