@@ -1,16 +1,24 @@
-FROM golang
+ARG BUILDPLATFORM
 
-ENV PORT 80
-EXPOSE $PORT
+FROM --platform=${BUILDPLATFORM} golang:1.25 AS builder
 
-RUN echo "\
-    UserKnownHostsFile /etc/secret-volume/known_hosts\n\
-    IdentityFile /etc/secret-volume/id_rsa\n\
-" >> /etc/ssh/ssh_config
+ARG TARGETOS
+ARG TARGETARCH
 
-ADD . /go/src/github.com/salemove/github-review-helper
-RUN go get -v -d github.com/salemove/github-review-helper && \
-  go install github.com/salemove/github-review-helper
+WORKDIR /app
+ADD . /app
 
-ENTRYPOINT /go/bin/github-review-helper
+ENV CGO_ENABLED=0
+ENV GOOS=${TARGETOS}
+ENV GOARCH=${TARGETARCH}
 
+RUN make build
+
+FROM scratch
+
+COPY --from=builder /app/github-review-helper /bin/github-review-helper
+
+ENV PORT=80
+EXPOSE ${PORT}
+
+ENTRYPOINT [ "/bin/github-review-helper" ]

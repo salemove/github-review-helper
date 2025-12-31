@@ -1,0 +1,7 @@
+# Send only necessary files to Docker build
+*
+
+!**/*.go
+!go.mod
+!go.sum
+!Makefile
