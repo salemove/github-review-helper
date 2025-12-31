@@ -14,9 +14,15 @@ ENV GOARCH=${TARGETARCH}
 
 RUN make build
 
-FROM scratch
+FROM alpine
 
 COPY --from=builder /app/github-review-helper /bin/github-review-helper
+
+RUN apk add --update --no-cache git openssh
+RUN echo "\
+    UserKnownHostsFile /etc/secret-volume/known_hosts\n\
+    IdentityFile /etc/secret-volume/id_rsa\n\
+" >> /etc/ssh/ssh_config
 
 ENV PORT=80
 EXPOSE ${PORT}
