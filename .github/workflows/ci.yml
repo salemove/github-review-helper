@@ -7,7 +7,7 @@ on:
       - master
 
 env:
-  REGISTRY_IMAGE: github-review-helper
+  REGISTRY_IMAGE: salemove/github-review-helper
 
 jobs:
   build-and-push:
