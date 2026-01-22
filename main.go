@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
-
-	"gopkg.in/tylerb/graceful.v1"
 
 	"github.com/google/go-github/github"
 	"github.com/gregjones/httpcache"
@@ -26,7 +27,7 @@ type retryGithubOperation func(func() asyncResponse) MaybeSyncResponse
 func main() {
 	conf := NewConfig()
 	githubClient := initGithubClient(conf.AccessToken)
-	reposDir, err := ioutil.TempDir("", "github-review-helper")
+	reposDir, err := os.MkdirTemp("", "github-review-helper")
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +47,29 @@ func main() {
 		githubClient.Search,
 	))
 
-	graceful.Run(fmt.Sprintf(":%d", conf.Port), 10*time.Second, mux)
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", conf.Port),
+		Handler: mux,
+	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			panic(err)
+		}
+	}()
+
+	<-stop
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		panic(err)
+	}
+
 	asyncOperationWg.Wait()
 }
 

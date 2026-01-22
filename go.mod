@@ -10,7 +10,6 @@ require (
 	github.com/onsi/gomega v1.38.3
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/oauth2 v0.34.0
-	gopkg.in/tylerb/graceful.v1 v1.2.15
 )
 
 require (
