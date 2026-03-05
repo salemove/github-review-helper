@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/gregjones/httpcache"
 	"github.com/salemove/github-review-helper/git"
 	"golang.org/x/oauth2"

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 )
 
 type (

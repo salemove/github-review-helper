@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/salemove/github-review-helper/git"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
@@ -118,7 +118,7 @@ var ItSquashesPR = func(context WebhookTestContext, pr *github.PullRequest) {
 
 		It("reports the failure", func() {
 			repositories.
-				On("CreateStatus", anyContext, repositoryOwner, repositoryName, headSHA, mock.MatchedBy(func(status *github.RepoStatus) bool {
+				On("CreateStatus", anyContext, repositoryOwner, repositoryName, headSHA, mock.MatchedBy(func(status github.RepoStatus) bool {
 					return *status.State == "failure" && *status.Context == "review/squash"
 				})).
 				Return(emptyResult, emptyResponse, noError)

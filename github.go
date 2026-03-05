@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 )
 
 var ErrNotMergeable = errors.New("PullRequests is not mergeable.")
@@ -20,7 +20,7 @@ type PullRequests interface {
 }
 
 type Repositories interface {
-	CreateStatus(ctx context.Context, owner, repo, ref string, status *github.RepoStatus) (*github.RepoStatus, *github.Response, error)
+	CreateStatus(ctx context.Context, owner, repo, ref string, status github.RepoStatus) (*github.RepoStatus, *github.Response, error)
 	GetCombinedStatus(ctx context.Context, owner, repo, ref string, opt *github.ListOptions) (*github.CombinedStatus, *github.Response, error)
 	IsCollaborator(ctx context.Context, owner, repo, user string) (bool, *github.Response, error)
 }
@@ -68,7 +68,7 @@ func setStatusForPR(pr *github.PullRequest, status *github.RepoStatus, repositor
 }
 
 func setStatus(revision string, repository Repository, status *github.RepoStatus, repositories Repositories) *ErrorResponse {
-	_, _, err := repositories.CreateStatus(context.TODO(), repository.Owner, repository.Name, revision, status)
+	_, _, err := repositories.CreateStatus(context.TODO(), repository.Owner, repository.Name, revision, *status)
 	if err != nil {
 		message := fmt.Sprintf("Failed to create a %s status for commit %s", *status.State, revision)
 		return &ErrorResponse{err, http.StatusBadGateway, message}
@@ -76,10 +76,10 @@ func setStatus(revision string, repository Repository, status *github.RepoStatus
 	return nil
 }
 
-func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []github.RepoStatus, *ErrorResponse) {
+func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []*github.RepoStatus, *ErrorResponse) {
 	headRepository := headRepository(pr)
 	pageNr := 1
-	statuses := []github.RepoStatus{}
+	statuses := []*github.RepoStatus{}
 	var state string
 	for {
 		listOptions := &github.ListOptions{
@@ -107,9 +107,9 @@ func getStatuses(pr *github.PullRequest, repositories Repositories) (string, []g
 	return state, statuses, nil
 }
 
-func searchIssues(query string, search Search) ([]github.Issue, error) {
+func searchIssues(query string, search Search) ([]*github.Issue, error) {
 	pageNr := 1
-	issues := []github.Issue{}
+	issues := []*github.Issue{}
 	for {
 		listOptions := github.ListOptions{
 			Page: pageNr,

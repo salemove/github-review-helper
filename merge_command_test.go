@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
@@ -167,7 +167,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								}).
 								Return(&github.CombinedStatus{
 									State: github.String("pending"),
-									Statuses: []github.RepoStatus{
+									Statuses: []*github.RepoStatus{
 										{
 											Context: github.String("jenkins/pr"),
 											State:   github.String("success"),
@@ -183,7 +183,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 								}).
 								Return(&github.CombinedStatus{
 									State: github.String("pending"),
-									Statuses: []github.RepoStatus{
+									Statuses: []*github.RepoStatus{
 										{
 											Context: github.String("review/squash"),
 											State:   github.String("pending"),

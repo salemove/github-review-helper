@@ -1,10 +1,10 @@
 module github.com/salemove/github-review-helper
 
-go 1.24.4
+go 1.25.0
 
 require (
 	github.com/deiwin/gonfigure v0.0.0-20150119092105-2ef53143b2c4
-	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/go-github/v84 v84.0.0
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.39.0

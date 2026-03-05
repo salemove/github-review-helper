@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
@@ -147,7 +147,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				It("reports success status to GitHub", func() {
 					repositories.
 						On("CreateStatus", anyContext, headRepository.Owner, headRepository.Name, pullRequestHeadSHA,
-							mock.MatchedBy(func(status *github.RepoStatus) bool {
+							mock.MatchedBy(func(status github.RepoStatus) bool {
 								return *status.State == "success" && *status.Context == "review/squash"
 							}),
 						).
@@ -172,7 +172,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				It("reports pending squash status to GitHub", func() {
 					repositories.
 						On("CreateStatus", anyContext, headRepository.Owner, headRepository.Name, pullRequestHeadSHA,
-							mock.MatchedBy(func(status *github.RepoStatus) bool {
+							mock.MatchedBy(func(status github.RepoStatus) bool {
 								return *status.State == "pending" && *status.Context == "review/squash"
 							}),
 						).
@@ -197,7 +197,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 				It("reports pending squash status to GitHub", func() {
 					repositories.
 						On("CreateStatus", anyContext, headRepository.Owner, headRepository.Name, pullRequestHeadSHA,
-							mock.MatchedBy(func(status *github.RepoStatus) bool {
+							mock.MatchedBy(func(status github.RepoStatus) bool {
 								return *status.State == "pending" && *status.Context == "review/squash"
 							}),
 						).

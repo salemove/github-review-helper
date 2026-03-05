@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/salemove/github-review-helper/git"
 )
 
@@ -160,7 +160,7 @@ func mergePullRequestsReadyForMerging(statusEvent StatusEvent, gitRepos git.Repo
 	)
 }
 
-func containsPendingSquashStatus(statuses []github.RepoStatus) bool {
+func containsPendingSquashStatus(statuses []*github.RepoStatus) bool {
 	for _, status := range statuses {
 		if *status.Context == githubStatusSquashContext && *status.State == "pending" {
 			return true

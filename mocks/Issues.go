@@ -4,7 +4,7 @@ import "github.com/stretchr/testify/mock"
 
 import "context"
 
-import "github.com/google/go-github/github"
+import "github.com/google/go-github/v84/github"
 
 type Issues struct {
 	mock.Mock
