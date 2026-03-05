@@ -193,6 +193,82 @@ var _ = Describe("Config", func() {
 			})
 		})
 	})
+
+	Describe("GitHub App authentication", func() {
+		var appAuthEnvVars = []envVar{
+			{name: "GITHUB_SECRET", value: "secret"},
+			{name: "GITHUB_APP_ID", value: "12345"},
+			{name: "GITHUB_APP_PRIVATE_KEY_FILE", value: "/path/to/key.pem"},
+			{name: "GITHUB_APP_INSTALLATION_ID", value: "67890"},
+		}
+
+		Context("with all app auth vars set (no PAT)", func() {
+			setEnvVars(appAuthEnvVars)
+
+			It("parses app auth config correctly", func() {
+				conf := grh.NewConfig()
+				Expect(conf.AppID).To(Equal(int64(12345)))
+				Expect(conf.AppPrivateKeyFile).To(Equal("/path/to/key.pem"))
+				Expect(conf.AppInstallationID).To(Equal(int64(67890)))
+				Expect(conf.AccessToken).To(BeEmpty())
+				Expect(conf.IsAppAuth()).To(BeTrue())
+			})
+		})
+
+		Context("with both PAT and app auth set", func() {
+			setEnvVars(append(appAuthEnvVars, envVar{name: "GITHUB_ACCESS_TOKEN", value: "token"}))
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+
+		Context("with neither PAT nor app auth set", func() {
+			setEnvVars([]envVar{
+				{name: "GITHUB_SECRET", value: "secret"},
+				{name: "GITHUB_ACCESS_TOKEN", value: ""},
+			})
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+
+		Context("with partial app auth (missing private key file)", func() {
+			setEnvVars([]envVar{
+				{name: "GITHUB_SECRET", value: "secret"},
+				{name: "GITHUB_APP_ID", value: "12345"},
+				{name: "GITHUB_APP_INSTALLATION_ID", value: "67890"},
+				{name: "GITHUB_ACCESS_TOKEN", value: ""},
+			})
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+
+		Context("with non-numeric GITHUB_APP_ID", func() {
+			setEnvVars([]envVar{
+				{name: "GITHUB_SECRET", value: "secret"},
+				{name: "GITHUB_APP_ID", value: "not-a-number"},
+				{name: "GITHUB_APP_PRIVATE_KEY_FILE", value: "/path/to/key.pem"},
+				{name: "GITHUB_APP_INSTALLATION_ID", value: "67890"},
+				{name: "GITHUB_ACCESS_TOKEN", value: ""},
+			})
+
+			It("panics", func() {
+				Expect(func() {
+					grh.NewConfig()
+				}).To(Panic())
+			})
+		})
+	})
 })
 
 var setEnvVar = func(variable envVar) {

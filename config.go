@@ -11,9 +11,12 @@ import (
 )
 
 var (
-	portProperty        = gonfigure.NewEnvProperty("PORT", "80")
-	accessTokenProperty = gonfigure.NewRequiredEnvProperty("GITHUB_ACCESS_TOKEN")
-	secretProperty      = gonfigure.NewRequiredEnvProperty("GITHUB_SECRET")
+	portProperty              = gonfigure.NewEnvProperty("PORT", "80")
+	accessTokenProperty       = gonfigure.NewEnvProperty("GITHUB_ACCESS_TOKEN", "")
+	secretProperty            = gonfigure.NewRequiredEnvProperty("GITHUB_SECRET")
+	appIDProperty             = gonfigure.NewEnvProperty("GITHUB_APP_ID", "")
+	appPrivateKeyFileProperty = gonfigure.NewEnvProperty("GITHUB_APP_PRIVATE_KEY_FILE", "")
+	appInstallationIDProperty = gonfigure.NewEnvProperty("GITHUB_APP_INSTALLATION_ID", "")
 	// A comma separated list of durations in the format defined in
 	// time.ParseDuration. E.g. "300ms,1.5h,2h45m". When first duration is 0,
 	// then GitHub API requests will initially be tried synchronously and only
@@ -24,8 +27,15 @@ var (
 type Config struct {
 	Port               int
 	AccessToken        string
+	AppID              int64
+	AppPrivateKeyFile  string
+	AppInstallationID  int64
 	Secret             string
 	GithubAPITryDeltas []time.Duration
+}
+
+func (c Config) IsAppAuth() bool {
+	return c.AppID != 0
 }
 
 func NewConfig() Config {
@@ -39,9 +49,42 @@ func NewConfig() Config {
 		panic(fmt.Sprintf("Failed to get deltas from GITHUB_API_TRIES durations string: %v", err))
 	}
 
+	accessToken := accessTokenProperty.Value()
+	appIDStr := appIDProperty.Value()
+	appPrivateKeyFile := appPrivateKeyFileProperty.Value()
+	appInstallationIDStr := appInstallationIDProperty.Value()
+
+	hasPatAuth := accessToken != ""
+	hasAppAuth := appIDStr != "" || appPrivateKeyFile != "" || appInstallationIDStr != ""
+
+	if hasPatAuth && hasAppAuth {
+		panic("Cannot configure both PAT (GITHUB_ACCESS_TOKEN) and GitHub App authentication. Choose one.")
+	}
+	if !hasPatAuth && !hasAppAuth {
+		panic("Must configure either GITHUB_ACCESS_TOKEN or all three GITHUB_APP_* variables.")
+	}
+
+	var appID, appInstallationID int64
+	if hasAppAuth {
+		if appIDStr == "" || appPrivateKeyFile == "" || appInstallationIDStr == "" {
+			panic("GitHub App auth requires all three: GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY_FILE, GITHUB_APP_INSTALLATION_ID")
+		}
+		appID, err = strconv.ParseInt(appIDStr, 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("GITHUB_APP_ID must be a number: %v", err))
+		}
+		appInstallationID, err = strconv.ParseInt(appInstallationIDStr, 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("GITHUB_APP_INSTALLATION_ID must be a number: %v", err))
+		}
+	}
+
 	return Config{
 		Port:               port,
-		AccessToken:        accessTokenProperty.Value(),
+		AccessToken:        accessToken,
+		AppID:              appID,
+		AppPrivateKeyFile:  appPrivateKeyFile,
+		AppInstallationID:  appInstallationID,
 		Secret:             secretProperty.Value(),
 		GithubAPITryDeltas: githubAPITryDeltas,
 	}
