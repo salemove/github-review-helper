@@ -3,10 +3,10 @@ module github.com/salemove/github-review-helper
 go 1.25.0
 
 require (
-	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
 	github.com/deiwin/gonfigure v0.0.0-20150119092105-2ef53143b2c4
 	github.com/google/go-github/v84 v84.0.0
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
+	github.com/jferrl/go-githubauth v1.5.1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.39.0
 	github.com/stretchr/testify v1.11.1
@@ -16,9 +16,8 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/go-github/v75 v75.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/onsi/ginkgo/v2 v2.27.5 // indirect

@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	ghinstallation "github.com/bradleyfalzon/ghinstallation/v2"
+	githubauth "github.com/jferrl/go-githubauth"
 	"github.com/google/go-github/v84/github"
 	"github.com/gregjones/httpcache"
 	"github.com/salemove/github-review-helper/git"
@@ -173,16 +173,18 @@ func handleStatusEvent(body []byte, retry retryGithubOperation, gitRepos git.Rep
 func initGithubClient(conf Config) *github.Client {
 	var transport http.RoundTripper
 	if conf.IsAppAuth() {
-		itr, err := ghinstallation.NewKeyFromFile(
-			http.DefaultTransport,
-			conf.AppID,
-			conf.AppInstallationID,
-			conf.AppPrivateKeyFile,
-		)
+		keyData, err := os.ReadFile(conf.AppPrivateKeyFile)
 		if err != nil {
-			panic(fmt.Sprintf("Failed to create GitHub App transport: %v", err))
+			panic(fmt.Sprintf("Failed to read GitHub App private key file: %v", err))
 		}
-		transport = itr
+		appTokenSource, err := githubauth.NewApplicationTokenSource(conf.AppID, keyData)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to create GitHub App token source: %v", err))
+		}
+		installationTokenSource := githubauth.NewInstallationTokenSource(conf.AppInstallationID, appTokenSource)
+		transport = &oauth2.Transport{
+			Source: installationTokenSource,
+		}
 	} else {
 		tokenSource := oauth2.StaticTokenSource(
 			&oauth2.Token{AccessToken: conf.AccessToken},
