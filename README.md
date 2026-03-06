@@ -39,12 +39,48 @@ It currently does 4 things:
    by a 'merging' label on the PR) and will notify the PR's author.
 
 ## Quick start
-### Create an access token for the bot
-This step is nicely [covered in GitHub's own
-documentation](https://help.github.com/articles/creating-an-access-token-for-command-line-use/). Create a token
-following the guide and mark it down.
+
+### Authentication
+
+The bot supports two authentication methods. You must configure exactly one.
+
+#### Option A: Personal Access Token
+
+This is the simpler option. Create a token following [GitHub's
+documentation](https://help.github.com/articles/creating-an-access-token-for-command-line-use/)
+and note it down. You will use it as the `GITHUB_ACCESS_TOKEN` environment variable.
+
+#### Option B: GitHub App
+
+A GitHub App provides fine-grained permissions and doesn't tie the bot to a
+personal account. To set one up:
+
+1. Go to **GitHub Settings > Developer settings > GitHub Apps > New GitHub App**
+2. Fill in the required fields:
+   - **GitHub App name**: choose a name (e.g. `review-helper`)
+   - **Homepage URL**: any URL
+   - **Webhook URL**: the bot's public URL (e.g. the ngrok address from a later step)
+   - **Webhook secret**: the same secret you will use for `GITHUB_SECRET`
+3. Under **Repository permissions**, grant:
+   - **Contents**: Read & write (for git push during squash/rebase)
+   - **Commit statuses**: Read & write (for creating and reading status checks)
+   - **Issues**: Read & write (for comments and labels)
+   - **Pull requests**: Read & write (for reading PR data and merging)
+   - **Metadata**: Read-only (automatically included)
+4. Under **Subscribe to events**, select:
+   - **Issue comment**
+   - **Pull request**
+   - **Status**
+5. No organization or user permissions are needed
+6. Click **Create GitHub App**
+7. On the app's settings page, note the **App ID**
+8. Generate a **private key** and download the `.pem` file
+9. Click **Install App**, install it on the target organization/account, and note
+   the **Installation ID** (visible in the URL: `https://github.com/settings/installations/<ID>`)
 
 ### Run the bot from a docker image
+
+**With a Personal Access Token:**
 ```
 docker run \
   -e GITHUB_ACCESS_TOKEN="the-access-token-you-created-above" \
@@ -54,9 +90,22 @@ docker run \
   salemove/github-review-helper
 ```
 
-Note that the snippet above mounts your local `~/.ssh` folder as a volume into
-the Docker container. This is required for the bot to be able to connect to
-your repositories using git. It will use the `known_hosts` file from that
+**With a GitHub App:**
+```
+docker run \
+  -e GITHUB_APP_ID="12345" \
+  -e GITHUB_APP_PRIVATE_KEY_FILE="/etc/private-key.pem" \
+  -e GITHUB_APP_INSTALLATION_ID="67890" \
+  -e GITHUB_SECRET="a-secret" \
+  -v /path/to/private-key.pem:/etc/private-key.pem:ro \
+  -v ~/.ssh:/etc/secret-volume \
+  -p 4567:80 \
+  salemove/github-review-helper
+```
+
+Note that both snippets mount your local `~/.ssh` folder as a volume into the
+Docker container. This is required for the bot to be able to connect to your
+repositories using git (via SSH). It will use the `known_hosts` file from that
 mounted folder for making sure that your connection to github.com is secure and
 the `id_rsa` file for the SSH identity.
 
@@ -73,18 +122,31 @@ The bot requires some environment variables to be set for it to function. Let's 
 is and why it's needed.
 
  - `PORT`: The port the bot will be listening for connections on
- - `GITHUB_ACCESS_TOKEN`: The token we created in a previous step. This required to authenticate your account with
-   GitHub.
- - `GITHUB_SECRET`: Another secret token that we will later use to configure GitHub webhooks for the bot. This will help
-   us make sure that all the requests are coming only from GitHub. [GitHub
+ - `GITHUB_SECRET`: A secret token used to verify that webhook requests are coming from GitHub. [GitHub
    suggests](https://developer.github.com/webhooks/securing/#setting-your-secret-token) running `ruby -rsecurerandom -e
    'puts SecureRandom.hex(20)'` to generate this token.
 
+**For Personal Access Token auth:**
+ - `GITHUB_ACCESS_TOKEN`: The token created in the authentication step above.
+
+**For GitHub App auth (all three are required):**
+ - `GITHUB_APP_ID`: The App ID from the GitHub App's settings page.
+ - `GITHUB_APP_PRIVATE_KEY_FILE`: Path to the `.pem` private key file generated for the app.
+ - `GITHUB_APP_INSTALLATION_ID`: The installation ID for the target organization or account.
+
 Now let's start the bot (you can replace `$GOPATH/bin/github-review-helper` with just `github-review-helper` if you have
 go executables on your path):
+
+**With a Personal Access Token:**
 ```
- PORT=4567 GITHUB_ACCESS_TOKEN="the-acces-token-you-created-above" GITHUB_SECRET="a-secret" $GOPATH/bin/github-review-helper
+PORT=4567 GITHUB_ACCESS_TOKEN="the-access-token-you-created-above" GITHUB_SECRET="a-secret" $GOPATH/bin/github-review-helper
 ```
+
+**With a GitHub App:**
+```
+PORT=4567 GITHUB_APP_ID="12345" GITHUB_APP_PRIVATE_KEY_FILE="/path/to/key.pem" GITHUB_APP_INSTALLATION_ID="67890" GITHUB_SECRET="a-secret" $GOPATH/bin/github-review-helper
+```
+
 PS: *The bot also needs git to be available on path and it expects the user the command is run under to have ssh access
 to the repositories it is used for.*
 
@@ -103,6 +165,9 @@ Forwarding    http://7e9ea9dc.ngrok.com -> 127.0.0.1:4567
 Note down the `http://*.ngrok.com` URL.
 
 ### Configure the webhook
+*Note: If you are using GitHub App authentication, the webhook is configured as part of the app setup. You can skip this
+section.*
+
 To set up a repository webhook on GitHub, head over to the **Settings** page of your repository, and click on **Webhooks &
 services**. After that, click on **Add webhook**. Then:
 
