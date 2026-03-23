@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
@@ -288,11 +288,11 @@ var githubCommits = func(commitList ...commit) []*github.RepositoryCommit {
 			},
 		}
 		if i > 0 {
-			githubCommitList[i].Parents = []github.Commit{
+			githubCommitList[i].Parents = []*github.Commit{
 				{SHA: githubCommitList[i-1].SHA},
 			}
 		} else {
-			githubCommitList[i].Parents = []github.Commit{
+			githubCommitList[i].Parents = []*github.Commit{
 				{SHA: github.String(arbitraryParentSHA)},
 			}
 		}

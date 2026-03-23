@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,7 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/go-github/github"
+	githubauth "github.com/jferrl/go-githubauth"
+	"github.com/google/go-github/v84/github"
 	"github.com/gregjones/httpcache"
 	"github.com/salemove/github-review-helper/git"
 	"golang.org/x/oauth2"
@@ -26,7 +28,10 @@ type retryGithubOperation func(func() asyncResponse) MaybeSyncResponse
 
 func main() {
 	conf := NewConfig()
-	githubClient := initGithubClient(conf.AccessToken)
+	githubClient := initGithubClient(conf)
+	if conf.IsAppAuth() {
+		slog.Info("Authenticated as GitHub App", "app_id", conf.AppID, "installation_id", conf.AppInstallationID)
+	}
 	reposDir, err := os.MkdirTemp("", "github-review-helper")
 	if err != nil {
 		panic(err)
@@ -165,16 +170,32 @@ func handleStatusEvent(body []byte, retry retryGithubOperation, gitRepos git.Rep
 	return SuccessResponse{"Status update does not affect any PRs mergeability. Ignoring."}
 }
 
-func initGithubClient(accessToken string) *github.Client {
-	tokenSource := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: accessToken},
-	)
-	oauthTransport := &oauth2.Transport{
-		Source: tokenSource,
+func initGithubClient(conf Config) *github.Client {
+	var transport http.RoundTripper
+	if conf.IsAppAuth() {
+		keyData, err := os.ReadFile(conf.AppPrivateKeyFile)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to read GitHub App private key file: %v", err))
+		}
+		appTokenSource, err := githubauth.NewApplicationTokenSource(conf.AppID, keyData)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to create GitHub App token source: %v", err))
+		}
+		installationTokenSource := githubauth.NewInstallationTokenSource(conf.AppInstallationID, appTokenSource)
+		transport = &oauth2.Transport{
+			Source: installationTokenSource,
+		}
+	} else {
+		tokenSource := oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: conf.AccessToken},
+		)
+		transport = &oauth2.Transport{
+			Source: tokenSource,
+		}
 	}
 
 	memoryCacheTransport := &httpcache.Transport{
-		Transport:           oauthTransport,
+		Transport:           transport,
 		Cache:               httpcache.NewMemoryCache(),
 		MarkCachedResponses: true,
 	}

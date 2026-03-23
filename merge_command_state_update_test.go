@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v84/github"
 	grh "github.com/salemove/github-review-helper"
 	"github.com/salemove/github-review-helper/mocks"
 	"github.com/stretchr/testify/mock"
@@ -118,7 +118,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						searchResult := &github.IssuesSearchResult{
 							Total:  github.Int(0),
-							Issues: []github.Issue{},
+							Issues: []*github.Issue{},
 						}
 						mockSearchQuery(1).Return(searchResult, &github.Response{}, noError)
 					})
@@ -141,7 +141,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						searchResult := &github.IssuesSearchResult{
 							Total: github.Int(1),
-							Issues: []github.Issue{{
+							Issues: []*github.Issue{{
 								Number: github.Int(issueNumber),
 								User: &github.User{
 									Login: github.String(userName),
@@ -255,7 +255,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 					BeforeEach(func() {
 						firstPageSearchResult := &github.IssuesSearchResult{
 							Total: github.Int(1),
-							Issues: []github.Issue{{
+							Issues: []*github.Issue{{
 								Number: github.Int(firstIssueNumber),
 								User: &github.User{
 									Login: github.String(firstAuthor),
@@ -264,7 +264,7 @@ var _ = TestWebhookHandler(func(context WebhookTestContext) {
 						}
 						secondPageSearchResult := &github.IssuesSearchResult{
 							Total: github.Int(1),
-							Issues: []github.Issue{{
+							Issues: []*github.Issue{{
 								Number: github.Int(secondIssueNumber),
 								User: &github.User{
 									Login: github.String(secondAuthor),
